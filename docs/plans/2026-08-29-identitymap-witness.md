@@ -352,11 +352,11 @@ reports visible classes with the by-construction label verbatim; `run.mjs` write
 `eval/out/report.json {layers, scorer, ablation, oracleAudited, killLines}`,
 exit 2 while `oracle.audited` is false, exit 0 only with all thresholds met.
 
-- [ ] **Step 1: thresholds transcribed from EVAL.md as data; failing run**
-- [ ] **Step 2–3: implement scorer/ablation/run (≈120 lines total)**
-- [ ] **Step 4: `node eval/run.mjs` → expected exit 2 with watermark
+- [x] **Step 1: thresholds transcribed from EVAL.md as data; failing run**
+- [x] **Step 2–3: implement scorer/ablation/run (≈120 lines total)**
+- [x] **Step 4: `node eval/run.mjs` → expected exit 2 with watermark
   `oracleAudited:false` and everything else green (audit flip is human-only)**
-- [ ] **Step 5: Commit** `T11: scorer + labeled ablation + gated report`
+- [x] **Step 5: Commit** `T11: scorer + labeled ablation + gated report`
 
 ---
 
