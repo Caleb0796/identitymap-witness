@@ -61,8 +61,23 @@ async function smokeSession(round, baseUrl) {
     if (payload.revision !== 17) throw new Error(`read revision ${payload.revision}, want 17`);
     if (payload.personaCount !== 8) throw new Error(`personaCount ${payload.personaCount}, want 8`);
 
-    const find = await invokeTool(cdp, sessionId, frameId, "find_mapping_counterexample", { expectedRevision: 17 });
+    const stage = await invokeTool(cdp, sessionId, frameId, "stage_mapping_invariants", {
+      expectedRevision: 17,
+      invariants: [
+        { id: "inv-forbid", type: "forbidden_group", personaCategory: "contractor", group: "employees" },
+        { id: "inv-null", type: "null_if_missing", field: "managerId", dependsOn: "managerId" },
+        { id: "inv-sot", type: "source_of_truth", field: "department", source: "hris" },
+      ],
+    });
+    if (!stage.roundTrip) throw new Error("stage round trip failed");
+    const staged = JSON.parse(textOf(stage.output));
+    if (staged.revision !== 18) throw new Error(`stage revision ${staged.revision}, want 18`);
+
+    const find = await invokeTool(cdp, sessionId, frameId, "find_mapping_counterexample", { expectedRevision: 18 });
     if (!find.roundTrip) throw new Error("find round trip failed");
+    const witness = JSON.parse(textOf(find.output));
+    if (JSON.stringify(witness.personaIds) !== '["P2","P3","P4"]')
+      throw new Error(`witness ${JSON.stringify(witness.personaIds)}, want [P2,P3,P4]`);
     const rows = await evalJs(cdp, sessionId, 'document.querySelectorAll("#matrix tbody tr").length');
     if (rows !== 4) throw new Error(`matrix rows ${rows} after find, want 4 (UI must update before/with the response)`);
 
@@ -72,7 +87,7 @@ async function smokeSession(round, baseUrl) {
     const canaries = JSON.stringify(payload).includes("CANARY_") || textOf(find.output).includes("CANARY_");
     if (canaries) throw new Error("CANARY_ leaked through a tool payload");
 
-    ok(`session ${round}: present, 5 tools, read r17, find→4 matrix rows, -32602, no canary (WebMCP.enable ${cdpDomainEnabled ? "ok" : "rejected"} — recorded, not asserted)`);
+    ok(`session ${round}: present, 5 tools, read r17, stage r18, find [P2,P3,P4]→4 matrix rows, -32602, no canary (WebMCP.enable ${cdpDomainEnabled ? "ok" : "rejected"} — recorded, not asserted)`);
     cdp.close();
   } finally {
     await chrome.close();

@@ -6,3 +6,4 @@
 2026-08-29T21:20:22Z T6 green — npm test 33/33; exhaustive witness == oracle [P2,P3,P4]; no size-2 cover (enumerated)
 2026-08-29T21:21:05Z T7 green — npm test 38/38; fingerprint invalidation + clean-to-violating catch
 2026-08-29T21:21:39Z T8 green — npm test 42/42; redaction covers keys, values, diffs; PII_GUARD throws
+2026-08-29T21:25:52Z T9 green — npm test 50/50; smoke x3 with REAL tools: stage r18, witness [P2,P3,P4], matrix 4

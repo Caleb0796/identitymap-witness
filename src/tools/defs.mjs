@@ -1,6 +1,9 @@
-// Isomorphic tool surface. T2: STUB handlers, shape-correct per SPEC §7, values
-// hardcoded from data/golden-walk.md. T9 replaces stubs with the real engine.
-// No node-only imports — this module runs in the page, in tests, and in the ablation.
+// Isomorphic tool surface — SPEC.md r2 §7, complete contracts. Imported unchanged
+// by the page (app.js), the tests, and the ablation. Zero node-only imports.
+import { parse } from "../engine/parser.mjs";
+import { evaluate } from "../engine/eval.mjs";
+import { findWitness } from "../engine/witness.mjs";
+import { redactPayload, assertNoCanary } from "./redact.mjs";
 
 export const GOLDEN_STATE = {
   revision: 17,
@@ -15,32 +18,14 @@ export const GOLDEN_STATE = {
   pins: [],
 };
 
-export function createStubStore(initial = GOLDEN_STATE) {
-  const state = structuredClone(initial);
-  state.evidence = {};
-  state.packets = {};
-  let lastFind = null;
-  return {
-    getState: () => state,
-    stagePins(invariants) {
-      state.pins = structuredClone(invariants);
-      state.revision += 1;
-    },
-    setLastFind(v) { lastFind = v; },
-    getLastFind: () => lastFind,
-  };
-}
+const PIN_SHAPES = {
+  forbidden_group: ["personaCategory", "group"],
+  null_if_missing: ["field", "dependsOn"],
+  source_of_truth: ["field", "source"],
+};
 
-const STUB_VIOLATIONS = [
-  { invariantId: "inv-forbid", personaId: "P2", field: "group", detail: "STUB: category contractor mapped into employees" },
-  { invariantId: "inv-null", personaId: "P3", field: "managerId", detail: "STUB: missing managerId coalesced to empty string" },
-  { invariantId: "inv-sot", personaId: "P4", field: "department", detail: "STUB: provenance ad while hris holds Engineering" },
-  { invariantId: "inv-sot", personaId: "P5", field: "department", detail: "STUB: present-but-empty ad value wins over hris" },
-];
-
-function mismatch(state) {
-  return { ok: false, error: { code: "REVISION_MISMATCH", currentRevision: state.revision } };
-}
+const failure = (code, extra = {}) => ({ ok: false, error: { code, ...extra } });
+const mismatch = (s) => failure("REVISION_MISMATCH", { currentRevision: s.revision });
 
 const HANDLERS = {
   read_mapping_session(store, personas) {
@@ -53,41 +38,102 @@ const HANDLERS = {
       personaCount: personas.length,
     } };
   },
+
   stage_mapping_invariants(store, _personas, args) {
     const s = store.getState();
     if (args.expectedRevision !== s.revision) return mismatch(s);
-    store.stagePins(args.invariants ?? []);
-    return { ok: true, payload: { revision: store.getState().revision, pinIds: store.getState().pins.map((p) => p.id) } };
+    const invariants = args.invariants ?? [];
+    if (!Array.isArray(invariants) || invariants.length > 8)
+      return failure("BAD_RULE", { reason: "invariants must be an array of at most 8" });
+    const withIds = invariants.map((inv, i) => {
+      const shape = PIN_SHAPES[inv.type];
+      if (!shape) throw Object.assign(new Error(`unknown invariant type ${inv.type}`), { code: "BAD_RULE" });
+      for (const k of shape) if (!(k in inv))
+        throw Object.assign(new Error(`invariant ${inv.type} missing ${k}`), { code: "BAD_RULE" });
+      return { id: inv.id ?? `pin-${i + 1}`, ...inv };
+    });
+    store.dispatch({ type: "PIN_INVARIANTS", invariants: withIds }); // full replace, bumps
+    const after = store.getState();
+    return { ok: true, payload: { revision: after.revision, pinIds: after.pins.map((p) => p.id) } };
   },
-  find_mapping_counterexample(store, _personas, args) {
+
+  find_mapping_counterexample(store, personas, args) {
     const s = store.getState();
     if (args.expectedRevision !== s.revision) return mismatch(s);
-    const payload = {
-      revision: s.revision,
-      personaIds: ["P2", "P3", "P4"],
-      violations: STUB_VIOLATIONS,
-      coverage: { "inv-forbid": true, "inv-null": true, "inv-sot": true },
-      evidenceIds: ["E-stub-1"],
-    };
-    store.setLastFind(payload);
-    return { ok: true, payload };
-  },
-  preview_mapping_patch(store, _personas, args) {
-    const s = store.getState();
-    if (args.expectedRevision !== s.revision) return mismatch(s);
+    let pins = s.pins;
+    if (args.invariantIds) {
+      const known = new Set(s.pins.map((p) => p.id));
+      for (const id of args.invariantIds) if (!known.has(id))
+        return failure("BAD_RULE", { reason: `unknown invariant id ${id}` });
+      pins = s.pins.filter((p) => args.invariantIds.includes(p.id));
+    }
+    const r = findWitness({ ...s, pins }, personas);
+    if (r.violations.length === 0) return failure("NO_COUNTEREXAMPLE", { checked: personas.length });
+    const evidenceId = store.recordEvidence("counterexample", {
+      fields: Object.keys(s.expressions),
+      invariants: pins.map((p) => p.id),
+      personas: personas.map((p) => p.id),
+    }, { violations: r.violations, personaIds: r.personaIds });
     return { ok: true, payload: {
-      revision: s.revision, field: args.field,
-      diffs: (args.personaIds ?? []).map((personaId) => ({ personaId, before: "<redacted:changed>", after: "<redacted:changed>" })),
-      remainingViolations: 0, evidenceId: "E-stub-2",
+      revision: s.revision,
+      personaIds: r.personaIds,
+      violations: r.violations,
+      coverage: r.coverage,
+      evidenceIds: [evidenceId],
     } };
   },
+
+  preview_mapping_patch(store, personas, args) {
+    const s = store.getState();
+    if (args.expectedRevision !== s.revision) return mismatch(s);
+    if (!(args.field in s.expressions))
+      return failure("INVALID_AST", { reason: `unknown target field ${args.field}`, position: 0 });
+    let patchedAst;
+    try { patchedAst = parse(args.expr); }
+    catch (e) { return failure("INVALID_AST", { reason: e.message, position: e.position ?? 0 }); }
+    const pool = new Map(personas.map((p) => [p.id, p]));
+    for (const id of args.personaIds ?? []) if (!pool.has(id)) return failure("UNKNOWN_PERSONA", { personaId: id });
+    const named = (args.personaIds ?? []).map((id) => pool.get(id));
+    const originalAst = parse(s.expressions[args.field]);
+    const diffs = named.map((p) => ({
+      personaId: p.id,
+      field: args.field,
+      before: evaluate(originalAst, p, { priority: s.priority }).value,
+      after: evaluate(patchedAst, p, { priority: s.priority }).value,
+    }));
+    const patchedState = { ...s, expressions: { ...s.expressions, [args.field]: args.expr } };
+    const after = findWitness(patchedState, named);
+    const remainingViolations = after.violations.filter((v) => v.field === args.field).length;
+    const evidenceId = store.recordEvidence("patch-preview", {
+      fields: [args.field],
+      invariants: s.pins.map((p) => p.id),
+      personas: named.map((p) => p.id),
+    }, { remainingViolations });
+    return { ok: true, payload: { revision: s.revision, field: args.field, diffs, remainingViolations, evidenceId } };
+  },
+
   prepare_mapping_review(store, _personas, args) {
     const s = store.getState();
     if (args.expectedRevision !== s.revision) return mismatch(s);
-    return { ok: true, payload: {
-      revision: s.revision, packetId: "PKT-stub",
-      coverage: { "inv-forbid": true, "inv-null": true, "inv-sot": true }, blockers: [],
-    } };
+    const ids = args.evidenceIds ?? [];
+    const staleIds = ids.filter((id) => !s.evidence[id] || s.evidence[id].stale);
+    if (staleIds.length) return failure("STALE_EVIDENCE", { staleIds });
+    const evidences = ids.map((id) => s.evidence[id]);
+    const coveredPins = new Set(evidences.flatMap((e) => e.fingerprint.invariants));
+    const coverage = {};
+    const blockers = [];
+    for (const pin of s.pins) {
+      coverage[pin.id] = coveredPins.has(pin.id);
+      if (!coverage[pin.id]) { blockers.push({ pin: pin.id, reason: "uncovered" }); continue; }
+      const newest = evidences.filter((e) => e.fingerprint.invariants.includes(pin.id)).at(-1);
+      const stillViolating = (newest.payload.violations ?? []).some((v) => v.invariantId === pin.id);
+      if (stillViolating) blockers.push({ pin: pin.id, reason: "violating" });
+    }
+    const packet = { revision: s.revision, coverage, blockers, evidenceIds: ids };
+    try { assertNoCanary(redactPayload(packet)); }
+    catch (e) { return failure("PII_GUARD", { reason: e.message }); }
+    const packetId = store.recordPacket(ids, Object.keys(coverage), blockers);
+    return { ok: true, payload: { revision: s.revision, packetId, coverage, blockers } };
   },
 };
 
@@ -127,15 +173,31 @@ export const TOOLS = [
     annotations: { readOnlyHint: true } },
 ];
 
+function shrink(payload) {
+  if (!payload.violations) return null;
+  let out = { ...payload,
+    violations: payload.violations.map(({ invariantId, personaId, field }) => ({ invariantId, personaId, field })),
+    violationsTotal: payload.violations.length,
+    truncated: true };
+  while (JSON.stringify(out).length > 1500 && out.violations.length > 1)
+    out = { ...out, violations: out.violations.slice(0, Math.ceil(out.violations.length / 2)) };
+  return JSON.stringify(out).length <= 1500 ? out : null;
+}
+
 export function runTool(store, personas, name, args) {
   const h = HANDLERS[name];
   if (!h) return { ok: false, error: { code: "UNKNOWN_TOOL", name } };
-  try {
-    const r = h(store, personas, args ?? {});
-    const text = JSON.stringify(r.ok ? r.payload : { error: r.error });
-    if (text.length > 1500) return { ok: false, error: { code: "EVALUATOR_FAILED", reason: "payload budget" } };
-    return r;
-  } catch (e) {
-    return { ok: false, error: { code: e.code ?? "EVALUATOR_FAILED", reason: String(e.message ?? e) } };
+  let r;
+  try { r = h(store, personas, args ?? {}); }
+  catch (e) { r = { ok: false, error: { code: e.code ?? "EVALUATOR_FAILED", reason: String(e.message ?? e) } }; }
+  if (!r.ok) return r;
+  let payload = redactPayload(r.payload);
+  try { assertNoCanary(payload); } catch (e) { return failure("PII_GUARD", { reason: e.message }); }
+  if (JSON.stringify(payload).length > 1500) {
+    const small = shrink(payload);
+    if (!small || JSON.stringify(small).length > 1500)
+      return failure("EVALUATOR_FAILED", { reason: "payload budget exceeded" });
+    payload = small;
   }
+  return { ok: true, payload };
 }

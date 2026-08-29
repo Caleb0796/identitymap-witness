@@ -139,7 +139,8 @@ Common rules: input `expectedRevision` required on every tool except
 `read_mapping_session`; on mismatch → error `REVISION_MISMATCH` with
 `{currentRevision}`. Every success payload includes `revision`. One text content
 item; `JSON.stringify(payload).length <= 1500` (over-budget → violations trimmed to
-ids + `truncated:true`; still over → `EVALUATOR_FAILED`). UI renders BEFORE return.
+ids-only and the list capped to fit, with `truncated:true` + `violationsTotal`;
+irreducibly over → `EVALUATOR_FAILED`). UI renders BEFORE return.
 `annotations: {readOnlyHint}` as listed — hints, not security. No apply/save/push
 tool exists.
 

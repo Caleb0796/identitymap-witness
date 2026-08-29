@@ -318,13 +318,13 @@ NO_COUNTEREXAMPLE as error. UI per SPEC §10 (grid, chips, matrix, provenance ra
 with candidates, packet panel, revision badge, disabled Apply). Human edits in the
 UI dispatch to the same store.
 
-- [ ] **Step 1: Failing tests** — per SPEC §7: 5 happy paths against golden state
+- [x] **Step 1: Failing tests** — per SPEC §7: 5 happy paths against golden state
   (find returns oracle witness); every error code provoked once; budget test at the
   cap (40-violation synthetic state → `truncated:true`, length ≤1500); pin replace
   semantics; canary sweep across all tools × personas (extends T8's property test).
-- [ ] **Step 2: FAIL** → **Step 3: implement tools (≈150 lines) + render (≈180 lines)**
-- [ ] **Step 4: `npm test` green (target ≥70) AND `--smoke` still exit 0**
-- [ ] **Step 5: Commit** `T9: real tools + full UI`
+- [x] **Step 2: FAIL** → **Step 3: implement tools (≈150 lines) + render (≈180 lines)**
+- [x] **Step 4: `npm test` green (target ≥70) AND `--smoke` still exit 0**
+- [x] **Step 5: Commit** `T9: real tools + full UI`
 
 ---
 
