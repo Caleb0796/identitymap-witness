@@ -261,7 +261,7 @@ listEvidence()}`. SPEC §8 verbatim: only EDIT_EXPRESSION / SET_PRIORITY /
 PIN_INVARIANTS (full replace) / UNPIN bump revision; record* never bumps;
 invalidation per fingerprint table.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```js
 test("fingerprint invalidation table", () => {
@@ -286,8 +286,8 @@ test("clean-to-violating edit is caught", () => {
 });
 ```
 
-- [ ] **Step 2: FAIL** → **Step 3: implement (≈80 lines)** → **Step 4: green**
-- [ ] **Step 5: Commit** `T7: store fingerprints + packets`
+- [x] **Step 2: FAIL** → **Step 3: implement (≈80 lines)** → **Step 4: green**
+- [x] **Step 5: Commit** `T7: store fingerprints + packets`
 
 ---
 
