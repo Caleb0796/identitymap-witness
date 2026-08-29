@@ -332,12 +332,12 @@ UI dispatch to the same store.
 
 **Files:** Modify `harness/relay.mjs` (add `--e2e`); Create `eval/out/.gitkeep`
 
-- [ ] **Step 1: Encode EVAL.md layer-3 rounds 1–10** (human-sim via
+- [x] **Step 1: Encode EVAL.md layer-3 rounds 1–10** (human-sim via
   `window.__imw.store.dispatch` through Runtime.evaluate; per-round asserts; trace
   JSON with invocationId/status/payload/ms → `eval/out/relay-<sha>.json`)
-- [ ] **Step 2: run → FAIL** → **Step 3: fix until rounds 5/9/10 show their
+- [x] **Step 2: run → FAIL** → **Step 3: fix until rounds 5/9/10 show their
   failure/recovery pairs** → **Step 4: exit 0, trace committed**
-- [ ] **Step 5: Commit** `T10: protocol E2E, 10 rounds, stale+recovery+pin-coverage`
+- [x] **Step 5: Commit** `T10: protocol E2E, 10 rounds, stale+recovery+pin-coverage`
 
 ---
 

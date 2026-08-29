@@ -55,7 +55,7 @@ Gate: exit 0.
 6. re-find → fresh evidence; violations no longer include P3/inv-null
 7. preview_mapping_patch on `group` fix over {P2} → diff redacted-clean
 8. HUMAN-SIM applies group fix + priority fix → re-find → NO_COUNTEREXAMPLE error
-   (all resolved) → prepare over remaining fresh evidence → packet `blockers:[]`
+   carrying a fresh clean-sweep evidence id → prepare over THAT id → packet `blockers:[]`
 9. recovery: wrong expectedRevision → REVISION_MISMATCH → corrected retry succeeds
 10. pin add mid-session: PIN_INVARIANTS with a 4th trivial pin → old packet
     incomplete-by-coverage (blocker `uncovered`), then unpin restores

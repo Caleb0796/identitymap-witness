@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// --smoke: layer-2 gate. Presence-by-round-trip (WebMCP.enable is recorded, never
-// asserted — measured to return OK even with no page API), tool count via awaited
-// getTools(), one Completed invokeTool round trip with the DOM already updated,
-// one -32602 unknown-name rejection, THREE cold sessions with fresh profiles.
+// Layer-2 (--smoke) and layer-3 (--e2e) gates. Presence is proven by the
+// completed round trip (WebMCP.enable returns OK even with no page API — measured;
+// recorded, never asserted). By-name calls go over the CDP WebMCP domain.
+import { execSync } from "node:child_process";
+import { writeFile } from "node:fs/promises";
 import { startServer } from "./serve.mjs";
 import { launchChrome } from "./chrome.mjs";
 import { connect, invokeTool, textOf } from "./cdp.mjs";
@@ -10,6 +11,10 @@ import { connect, invokeTool, textOf } from "./cdp.mjs";
 const MODE = process.argv[2] ?? "--smoke";
 const fail = (msg) => { console.error(`FAIL ${msg}`); process.exit(1); };
 const ok = (msg) => console.log(`ok    ${msg}`);
+const assertEq = (got, want, what) => {
+  if (JSON.stringify(got) !== JSON.stringify(want))
+    throw new Error(`${what}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+};
 
 async function attachToPage(cdp, wantUrl) {
   for (let i = 0; i < 60; i++) {
@@ -24,88 +29,179 @@ async function attachToPage(cdp, wantUrl) {
   throw new Error(`no page target for ${wantUrl}`);
 }
 
-async function evalJs(cdp, sessionId, expression, { awaitPromise = false } = {}) {
-  const r = await cdp.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise }, sessionId);
-  if (r.exceptionDetails) throw new Error(`page eval threw: ${r.exceptionDetails.text} ${r.exceptionDetails.exception?.description ?? ""}`);
-  return r.result.value;
-}
-
-async function smokeSession(round, baseUrl) {
+async function bootSession(baseUrl) {
   const cdpPort = 9400 + Math.floor(Math.random() * 400);
   const chrome = await launchChrome({ cdpPort, url: baseUrl });
+  const cdp = await connect(chrome.wsUrl);
+  const sessionId = await attachToPage(cdp, baseUrl);
+  let cdpDomainEnabled = true;
+  try { await cdp.send("WebMCP.enable", {}, sessionId); } catch { cdpDomainEnabled = false; }
+  const evalJs = async (expression, { awaitPromise = false } = {}) => {
+    const r = await cdp.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise }, sessionId);
+    if (r.exceptionDetails) throw new Error(`page eval threw: ${r.exceptionDetails.text} ${r.exceptionDetails.exception?.description ?? ""}`);
+    return r.result.value;
+  };
+  for (let i = 0; i < 60; i++) {
+    if (await evalJs("Boolean(window.__imw)").catch(() => false)) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (!await evalJs("Boolean(window.__imw)")) throw new Error("page module never initialized");
+  const { frameTree } = await cdp.send("Page.getFrameTree", {}, sessionId);
+  return { chrome, cdp, sessionId, frameId: frameTree.frame.id, evalJs, cdpDomainEnabled };
+}
+
+const PINS = [
+  { id: "inv-forbid", type: "forbidden_group", personaCategory: "contractor", group: "employees" },
+  { id: "inv-null", type: "null_if_missing", field: "managerId", dependsOn: "managerId" },
+  { id: "inv-sot", type: "source_of_truth", field: "department", source: "hris" },
+];
+
+// ── layer 2 ──────────────────────────────────────────────────────────────────
+async function smokeSession(round, baseUrl) {
+  const s = await bootSession(baseUrl);
   try {
-    const cdp = await connect(chrome.wsUrl);
-    const sessionId = await attachToPage(cdp, baseUrl);
-    let cdpDomainEnabled = true;
-    try { await cdp.send("WebMCP.enable", {}, sessionId); } catch { cdpDomainEnabled = false; }
-
-    for (let i = 0; i < 60; i++) {
-      const ready = await evalJs(cdp, sessionId, "Boolean(window.__imw)").catch(() => false);
-      if (ready) break;
-      await new Promise((r) => setTimeout(r, 250));
-    }
-    if (!await evalJs(cdp, sessionId, "Boolean(window.__imw)")) throw new Error("page module never initialized");
-
-    const present = await evalJs(cdp, sessionId, 'typeof document.modelContext !== "undefined" && document.modelContext !== null');
+    const present = await s.evalJs('typeof document.modelContext !== "undefined" && document.modelContext !== null');
     if (!present) throw new Error("document.modelContext absent — flag missing or engine mismatch");
-
-    const count = await evalJs(cdp, sessionId, "document.modelContext.getTools().then(t => t.length)", { awaitPromise: true });
+    const count = await s.evalJs("document.modelContext.getTools().then(t => t.length)", { awaitPromise: true });
     if (count !== 5) throw new Error(`getTools() length ${count}, want 5`);
 
-    const { frameTree } = await cdp.send("Page.getFrameTree", {}, sessionId);
-    const frameId = frameTree.frame.id;
-
-    const read = await invokeTool(cdp, sessionId, frameId, "read_mapping_session", {});
-    if (!read.roundTrip) throw new Error(`read_mapping_session round trip failed: ${JSON.stringify(read)}`);
+    const read = await invokeTool(s.cdp, s.sessionId, s.frameId, "read_mapping_session", {});
+    if (!read.roundTrip) throw new Error(`read round trip failed: ${JSON.stringify(read)}`);
     const payload = JSON.parse(textOf(read.output));
-    if (payload.revision !== 17) throw new Error(`read revision ${payload.revision}, want 17`);
-    if (payload.personaCount !== 8) throw new Error(`personaCount ${payload.personaCount}, want 8`);
+    assertEq(payload.revision, 17, "read revision");
+    assertEq(payload.personaCount, 8, "personaCount");
 
-    const stage = await invokeTool(cdp, sessionId, frameId, "stage_mapping_invariants", {
-      expectedRevision: 17,
-      invariants: [
-        { id: "inv-forbid", type: "forbidden_group", personaCategory: "contractor", group: "employees" },
-        { id: "inv-null", type: "null_if_missing", field: "managerId", dependsOn: "managerId" },
-        { id: "inv-sot", type: "source_of_truth", field: "department", source: "hris" },
-      ],
-    });
+    const stage = await invokeTool(s.cdp, s.sessionId, s.frameId, "stage_mapping_invariants",
+      { expectedRevision: 17, invariants: PINS });
     if (!stage.roundTrip) throw new Error("stage round trip failed");
-    const staged = JSON.parse(textOf(stage.output));
-    if (staged.revision !== 18) throw new Error(`stage revision ${staged.revision}, want 18`);
+    assertEq(JSON.parse(textOf(stage.output)).revision, 18, "stage revision");
 
-    const find = await invokeTool(cdp, sessionId, frameId, "find_mapping_counterexample", { expectedRevision: 18 });
+    const find = await invokeTool(s.cdp, s.sessionId, s.frameId, "find_mapping_counterexample", { expectedRevision: 18 });
     if (!find.roundTrip) throw new Error("find round trip failed");
-    const witness = JSON.parse(textOf(find.output));
-    if (JSON.stringify(witness.personaIds) !== '["P2","P3","P4"]')
-      throw new Error(`witness ${JSON.stringify(witness.personaIds)}, want [P2,P3,P4]`);
-    const rows = await evalJs(cdp, sessionId, 'document.querySelectorAll("#matrix tbody tr").length');
-    if (rows !== 4) throw new Error(`matrix rows ${rows} after find, want 4 (UI must update before/with the response)`);
+    assertEq(JSON.parse(textOf(find.output)).personaIds, ["P2", "P3", "P4"], "witness");
+    const rows = await s.evalJs('document.querySelectorAll("#matrix tbody tr").length');
+    assertEq(rows, 4, "matrix rows after find");
 
-    const nope = await invokeTool(cdp, sessionId, frameId, "no_such_tool", {});
-    if (!nope.sendRejected || nope.cdp?.code !== -32602) throw new Error(`unknown tool: want -32602 send rejection, got ${JSON.stringify(nope)}`);
+    const nope = await invokeTool(s.cdp, s.sessionId, s.frameId, "no_such_tool", {});
+    if (!nope.sendRejected || nope.cdp?.code !== -32602)
+      throw new Error(`unknown tool: want -32602 send rejection, got ${JSON.stringify(nope)}`);
 
-    const canaries = JSON.stringify(payload).includes("CANARY_") || textOf(find.output).includes("CANARY_");
-    if (canaries) throw new Error("CANARY_ leaked through a tool payload");
+    if (textOf(read.output).includes("CANARY_") || textOf(find.output).includes("CANARY_"))
+      throw new Error("CANARY_ leaked through a tool payload");
 
-    ok(`session ${round}: present, 5 tools, read r17, stage r18, find [P2,P3,P4]→4 matrix rows, -32602, no canary (WebMCP.enable ${cdpDomainEnabled ? "ok" : "rejected"} — recorded, not asserted)`);
-    cdp.close();
+    ok(`session ${round}: present, 5 tools, read r17, stage r18, find [P2,P3,P4]→4 matrix rows, -32602, no canary (WebMCP.enable ${s.cdpDomainEnabled ? "ok" : "rejected"} — recorded, not asserted)`);
   } finally {
-    await chrome.close();
+    s.cdp.close();
+    await s.chrome.close();
   }
 }
 
-if (MODE === "--smoke") {
-  const { server, port } = await startServer(0);
-  const baseUrl = `http://127.0.0.1:${port}/`;
+// ── layer 3 ──────────────────────────────────────────────────────────────────
+async function e2e(baseUrl) {
+  const s = await bootSession(baseUrl);
+  const trace = [];
+  const call = async (round, toolName, input) => {
+    const t0 = Date.now();
+    const r = await invokeTool(s.cdp, s.sessionId, s.frameId, toolName, input);
+    const text = textOf(r.output);
+    trace.push({ round, kind: "tool", toolName, input, invocationId: r.invocationId,
+      status: r.status, matched: r.matched, ms: Date.now() - t0, payload: text ? JSON.parse(text) : null });
+    if (text?.includes("CANARY_")) throw new Error(`round ${round}: canary leak`);
+    return { r, p: text ? JSON.parse(text) : null };
+  };
+  const human = async (round, action) => {
+    const rev = await s.evalJs(
+      `window.__imw.store.dispatch(${JSON.stringify(action)}); window.__imw.render(); window.__imw.store.getState().revision`);
+    trace.push({ round, kind: "human-sim", action, revisionAfter: rev });
+    return rev;
+  };
   try {
+    // 1 read → r17
+    const r1 = await call(1, "read_mapping_session", {});
+    assertEq(r1.p.revision, 17, "round1 revision");
+    // 2 stage 3 pins → r18
+    const r2 = await call(2, "stage_mapping_invariants", { expectedRevision: 17, invariants: PINS });
+    assertEq(r2.p.revision, 18, "round2 revision");
+    // 3 find → witness [P2,P3,P4], evidence E1
+    const r3 = await call(3, "find_mapping_counterexample", { expectedRevision: 18 });
+    assertEq(r3.p.personaIds, ["P2", "P3", "P4"], "round3 witness");
+    const E1 = r3.p.evidenceIds;
+    // 4 human fixes managerId (r19); E1 must go stale — and only via fingerprint
+    const rev4 = await human(4, { type: "EDIT_EXPRESSION", field: "managerId", expr: "user.managerId" });
+    assertEq(rev4, 19, "round4 revision");
+    const e1stale = await s.evalJs(`window.__imw.store.getState().evidence[${JSON.stringify(E1[0])}].stale`);
+    assertEq(e1stale, true, "round4 E1 stale");
+    // 5 prepare over stale E1 MUST fail
+    const r5 = await call(5, "prepare_mapping_review", { expectedRevision: 19, evidenceIds: E1 });
+    assertEq(r5.p.error.code, "STALE_EVIDENCE", "round5 code");
+    assertEq(r5.p.error.staleIds, E1, "round5 staleIds");
+    // 6 re-find: P3 fixed, witness shrinks to [P2,P4]
+    const r6 = await call(6, "find_mapping_counterexample", { expectedRevision: 19 });
+    assertEq(r6.p.personaIds, ["P2", "P4"], "round6 witness");
+    assertEq(r6.p.violations.length, 3, "round6 violations");
+    // 7 preview the group fix over P2 — draft untouched
+    const r7 = await call(7, "preview_mapping_patch", {
+      expectedRevision: 19, field: "group",
+      expr: 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"',
+      personaIds: ["P2"] });
+    assertEq(r7.p.diffs, [{ personaId: "P2", field: "group", before: "employees", after: "contractors" }], "round7 diff");
+    assertEq(r7.p.remainingViolations, 0, "round7 remaining");
+    const rev7 = await s.evalJs("window.__imw.store.getState().revision");
+    assertEq(rev7, 19, "round7 preview must not bump revision");
+    // 8 human applies group fix (r20) + priority fix (r21); clean sweep → green packet
+    await human(8, { type: "EDIT_EXPRESSION", field: "group", expr: 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"' });
+    const rev8 = await human(8, { type: "SET_PRIORITY", priority: ["hris", "ad"] });
+    assertEq(rev8, 21, "round8 revision");
+    const r8 = await call(8, "find_mapping_counterexample", { expectedRevision: 21 });
+    assertEq(r8.p.error.code, "NO_COUNTEREXAMPLE", "round8 clean sweep");
+    const E3 = r8.p.error.evidenceIds;
+    const r8b = await call(8, "prepare_mapping_review", { expectedRevision: 21, evidenceIds: E3 });
+    assertEq(r8b.p.blockers, [], "round8 packet green");
+    // 9 recovery: wrong expectedRevision → REVISION_MISMATCH with currentRevision → one retry works
+    const r9 = await call(9, "find_mapping_counterexample", { expectedRevision: 17 });
+    assertEq(r9.p.error.code, "REVISION_MISMATCH", "round9 code");
+    assertEq(r9.p.error.currentRevision, 21, "round9 currentRevision");
+    const r9b = await call(9, "find_mapping_counterexample", { expectedRevision: r9.p.error.currentRevision });
+    assertEq(r9b.p.error.code, "NO_COUNTEREXAMPLE", "round9 recovery lands on the clean sweep");
+    // 10 pin add → packet incomplete-by-coverage; unpin → green again
+    const r10 = await call(10, "stage_mapping_invariants", { expectedRevision: 21, invariants: [
+      ...PINS, { id: "pin-extra", type: "forbidden_group", personaCategory: "nobody", group: "nothing" }] });
+    assertEq(r10.p.revision, 22, "round10 revision");
+    const e3fresh = await s.evalJs(`window.__imw.store.getState().evidence[${JSON.stringify(E3[0])}].stale`);
+    assertEq(e3fresh, false, "round10 clean-sweep evidence survives an ADDED pin (fingerprint untouched)");
+    const r10b = await call(10, "prepare_mapping_review", { expectedRevision: 22, evidenceIds: E3 });
+    assertEq(r10b.p.blockers, [{ pin: "pin-extra", reason: "uncovered" }], "round10 uncovered blocker");
+    const r10c = await call(10, "stage_mapping_invariants", { expectedRevision: 22, invariants: PINS });
+    assertEq(r10c.p.revision, 23, "round10 unpin revision");
+    const r10d = await call(10, "prepare_mapping_review", { expectedRevision: 23, evidenceIds: E3 });
+    assertEq(r10d.p.blockers, [], "round10 green after unpin");
+
+    const sha = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+    const out = `eval/out/relay-${sha}.json`;
+    await writeFile(new URL(`../${out}`, import.meta.url),
+      JSON.stringify({ sha, when: new Date().toISOString(), rounds: 10, trace }, null, 2));
+    ok(`e2e: 10 rounds green — stale rejection (r5), mismatch recovery (r9), pin-coverage flip (r10); trace → ${out}`);
+  } finally {
+    s.cdp.close();
+    await s.chrome.close();
+  }
+}
+
+const { server, port } = await startServer(0);
+const baseUrl = `http://127.0.0.1:${port}/`;
+try {
+  if (MODE === "--smoke") {
     for (let round = 1; round <= 3; round++) await smokeSession(round, baseUrl);
     console.log("SMOKE PASS (3 cold sessions)");
-  } catch (e) {
-    fail(String(e.message ?? e));
-  } finally {
-    server.close();
+  } else if (MODE === "--e2e") {
+    await e2e(baseUrl);
+    console.log("E2E PASS (10 rounds)");
+  } else {
+    fail(`unknown mode ${MODE}`);
   }
-  process.exit(0);
-} else {
-  fail(`unknown mode ${MODE} (--e2e arrives in T10)`);
+} catch (e) {
+  fail(String(e.message ?? e));
+} finally {
+  server.close();
 }
+process.exit(0);

@@ -94,6 +94,11 @@ test("NO_COUNTEREXAMPLE is an error, not an empty success (clean snapshot)", asy
   assert.equal(r.ok, false);
   assert.equal(r.error.code, "NO_COUNTEREXAMPLE");
   assert.equal(r.error.checked, 8);
+  assert.equal(r.error.evidenceIds.length, 1); // clean sweep is citable evidence
+  const prep = runTool(store, personas, "prepare_mapping_review",
+    { expectedRevision: store.getState().revision, evidenceIds: r.error.evidenceIds });
+  assert.ok(prep.ok);
+  assert.deepEqual(prep.payload.blockers, []);
 });
 
 test("INVALID_AST with position; UNKNOWN_PERSONA; unknown target field", async () => {

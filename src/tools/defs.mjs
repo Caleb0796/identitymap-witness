@@ -68,7 +68,15 @@ const HANDLERS = {
       pins = s.pins.filter((p) => args.invariantIds.includes(p.id));
     }
     const r = findWitness({ ...s, pins }, personas);
-    if (r.violations.length === 0) return failure("NO_COUNTEREXAMPLE", { checked: personas.length });
+    if (r.violations.length === 0) {
+      // Clean sweep is still evidence — recorded so a green packet can cite it.
+      const evidenceId = store.recordEvidence("clean-sweep", {
+        fields: Object.keys(s.expressions),
+        invariants: pins.map((p) => p.id),
+        personas: personas.map((p) => p.id),
+      }, { violations: [] });
+      return failure("NO_COUNTEREXAMPLE", { checked: personas.length, evidenceIds: [evidenceId] });
+    }
     const evidenceId = store.recordEvidence("counterexample", {
       fields: Object.keys(s.expressions),
       invariants: pins.map((p) => p.id),

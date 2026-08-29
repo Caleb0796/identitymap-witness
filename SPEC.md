@@ -159,8 +159,10 @@ tool exists.
 - Evaluates ALL personas × ALL expressions, checks the named pins, exhaustive
   minimal witness (2^8 subsets max). out: `{revision, personaIds, violations:
   [{invariantId, personaId, field, detail}], coverage: {invId: bool}, evidenceIds}`.
-  No violations → error `NO_COUNTEREXAMPLE {checked: n}` (not an empty success —
-  the agent must distinguish). Unknown pin id → `BAD_RULE`. Engine throw → `EVALUATOR_FAILED`.
+  No violations → error `NO_COUNTEREXAMPLE {checked, evidenceIds}` (not an empty
+  success — the agent must distinguish; a `clean-sweep` evidence IS recorded and its
+  id returned inside the error so `prepare_mapping_review` can cite the all-clear).
+  Unknown pin id → `BAD_RULE`. Engine throw → `EVALUATOR_FAILED`.
 
 **preview_mapping_patch** (readOnly true — records evidence, DOES NOT edit the draft)
 - in: `{expectedRevision, field, expr, personaIds: [string]}`
