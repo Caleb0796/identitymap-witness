@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IdentityMap Witness</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header>
+    <h1>IdentityMap Witness</h1>
+    <div id="status" class="badges">
+      <span id="mc-badge" class="badge">modelContext: …</span>
+      <span id="rev-badge" class="badge">r—</span>
+    </div>
+  </header>
+  <main>
+    <section id="mapping">
+      <h2>Unsaved mapping draft</h2>
+      <div class="hint">Priority: <span id="priority"></span> · edits here are session-only until a human saves</div>
+      <table id="grid"><thead><tr><th>target field</th><th>expression (draft)</th><th>prov</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section id="invariants">
+      <h2>Pinned invariants</h2>
+      <ul id="pins"><li class="hint">none pinned yet — the human writes these during review</li></ul>
+    </section>
+    <section id="witness">
+      <h2>Counterexample matrix</h2>
+      <table id="matrix"><thead><tr><th>persona</th><th>invariant</th><th>field</th><th>detail</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section id="packet">
+      <h2>Review packet</h2>
+      <div id="packet-state" class="hint">no packet</div>
+      <button id="apply" disabled title="Never enabled for the agent; stays human-only">Apply mapping (human only)</button>
+    </section>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

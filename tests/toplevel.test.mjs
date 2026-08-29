@@ -1,0 +1,44 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
+
+const ROOT = new URL("..", import.meta.url).pathname;
+
+async function jsFiles(dir) {
+  const out = [];
+  let entries;
+  try { entries = await readdir(join(ROOT, dir)); } catch { return out; }
+  for (const e of entries) {
+    const p = join(ROOT, dir, e);
+    if ((await stat(p)).isDirectory()) out.push(...await jsFiles(join(dir, e)));
+    else if (/\.(mjs|js)$/.test(e)) out.push(join(dir, e));
+  }
+  return out;
+}
+
+// Blank string literals and comments so prose/regex mentions don't count as call sites.
+function blank(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length))
+    .replace(/(["'`])(?:\\.|(?!\1)[^\\\n])*\1/g, (m) => m[0] + " ".repeat(m.length - 2) + m[0]);
+}
+
+test("registerTool call sites live only in the top-level entry module (app.js)", async () => {
+  const files = ["app.js", ...await jsFiles("src"), ...await jsFiles("harness")];
+  const sites = [];
+  for (const f of files) {
+    const src = blank(await readFile(join(ROOT, f), "utf8"));
+    if (/registerTool\s*\(/.test(src)) sites.push(f);
+  }
+  assert.deepEqual(sites, ["app.js"], "registration must be reachable only from the top-level document entry");
+});
+
+test("banned identifier navigator.modelContext appears nowhere in code", async () => {
+  const files = ["app.js", ...await jsFiles("src"), ...await jsFiles("harness")];
+  for (const f of files) {
+    const src = await readFile(join(ROOT, f), "utf8");
+    assert.ok(!src.includes("navigator." + "modelContext"), `${f} uses the dead API surface`);
+  }
+});

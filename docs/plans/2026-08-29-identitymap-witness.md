@@ -169,13 +169,13 @@ for (const t of TOOLS) {
   unknown name → -32602 at send; matrix DOM node exists; **cold sessions ×3**, fresh
   profile each, all pass.
 
-- [ ] **Step 1: Write `tests/toplevel.test.mjs`** — static import-graph walk (blank
+- [x] **Step 1: Write `tests/toplevel.test.mjs`** — static import-graph walk (blank
   strings/comments, regex imports): `registerTool` reachable only from index.html's
   entry module; `navigator.modelContext` absent from `src/**`, `harness/**`, `app.js`.
-- [ ] **Step 2: `npm test` → new test FAILS (files missing)**
-- [ ] **Step 3: Implement the slice (stub handlers; minimal grid + matrix DOM)**
-- [ ] **Step 4: `npm test` green AND `node harness/relay.mjs --smoke` exit 0**
-- [ ] **Step 5: Commit** `T2: vertical slice — root page, 5 stub tools, CDP smoke x3`
+- [x] **Step 2: `npm test` → new test FAILS (files missing)**
+- [x] **Step 3: Implement the slice (stub handlers; minimal grid + matrix DOM)**
+- [x] **Step 4: `npm test` green AND `node harness/relay.mjs --smoke` exit 0**
+- [x] **Step 5: Commit** `T2: vertical slice — root page, 5 stub tools, CDP smoke x3`
 
 ---
 
