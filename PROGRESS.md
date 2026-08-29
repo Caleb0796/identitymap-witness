@@ -2,3 +2,4 @@
 2026-08-29T20:52:01Z T2 all green — npm test 5/5; smoke exit 0: 3 cold sessions, present+5tools+roundtrip r17+matrix4+(-32602)+no-canary
 2026-08-29T21:17:58Z T3 green — npm test 13/13; parser rejects 9 out-of-grammar forms with positions
 2026-08-29T21:19:06Z T4 green — npm test 24/24; golden cross-check: engine reproduces hand-walk 8x5
+2026-08-29T21:19:45Z T5 green — npm test 29/29; golden violations == oracle; snapshot state clean

@@ -226,11 +226,11 @@ Resolution/null/empty semantics per SPEC §6 exactly.
 personaId, field, detail}]`; `outputs[personaId] = {fields: {name: {value, prov}}}`.
 SPEC §5 semantics; checker case-insensitive on category/group (DC1 asymmetry).
 
-- [ ] **Step 1: Failing tests** — golden outputs (from T4) produce EXACTLY
+- [x] **Step 1: Failing tests** — golden outputs (from T4) produce EXACTLY
   oracle.expectedViolations (set-equal); corrected-snapshot outputs produce zero;
   per-type edge cases (missing group field, null category).
-- [ ] **Step 2: FAIL** → **Step 3: implement (≈50 lines)** → **Step 4: green**
-- [ ] **Step 5: Commit** `T5: invariant checker matches oracle`
+- [x] **Step 2: FAIL** → **Step 3: implement (≈50 lines)** → **Step 4: green**
+- [x] **Step 5: Commit** `T5: invariant checker matches oracle`
 
 ---
 
