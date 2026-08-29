@@ -1,0 +1,12 @@
+{
+  "revision": 9,
+  "priority": ["hris", "ad"],
+  "expressions": {
+    "displayName": "user.firstName + \" \" + user.lastName",
+    "group": "String.toLowerCase(user.userType) == \"contractor\" ? \"contractors\" : \"employees\"",
+    "managerId": "user.managerId",
+    "department": "user.department",
+    "email": "user.email"
+  },
+  "pins": []
+}

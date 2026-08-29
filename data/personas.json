@@ -1,0 +1,66 @@
+[
+  {
+    "id": "P1", "category": "employee", "region": "US",
+    "profiles": {
+      "okta": { "firstName": "CANARY_FN_P1", "lastName": "CANARY_LN_P1", "email": "CANARY_EM_P1@example.invalid", "userType": "employee", "managerId": "M100", "department": "Engineering" },
+      "hris": { "userType": "employee", "managerId": "M100", "department": "Engineering" },
+      "ad": {}
+    }
+  },
+  {
+    "id": "P2", "category": "contractor", "region": "US",
+    "profiles": {
+      "okta": { "firstName": "CANARY_FN_P2", "lastName": "CANARY_LN_P2", "email": "CANARY_EM_P2@example.invalid", "userType": "contractor" },
+      "hris": { "userType": "Contractor", "managerId": "M200", "department": "Marketing" },
+      "ad": {}
+    }
+  },
+  {
+    "id": "P3", "category": "employee", "region": "EU",
+    "profiles": {
+      "okta": { "firstName": "CANARY_FN_P3", "lastName": "CANARY_LN_P3", "email": "CANARY_EM_P3@example.invalid", "userType": "employee" },
+      "hris": { "userType": "employee", "department": "Support" },
+      "ad": {}
+    }
+  },
+  {
+    "id": "P4", "category": "employee", "region": "US",
+    "profiles": {
+      "okta": { "firstName": "CANARY_FN_P4", "lastName": "CANARY_LN_P4", "email": "CANARY_EM_P4@example.invalid", "userType": "employee" },
+      "hris": { "firstName": "CANARY_FN_P4H", "userType": "employee", "managerId": "M400", "department": "Engineering" },
+      "ad": { "department": "Sales" }
+    }
+  },
+  {
+    "id": "P5", "category": "employee", "region": "US",
+    "profiles": {
+      "okta": { "firstName": "CANARY_FN_P5", "lastName": "CANARY_LN_P5", "email": "CANARY_EM_P5@example.invalid", "userType": "employee" },
+      "hris": { "userType": "employee", "managerId": "M500", "department": "Finance" },
+      "ad": { "department": "" }
+    }
+  },
+  {
+    "id": "P6", "category": "employee", "region": "US",
+    "profiles": {
+      "okta": { "firstName": "CANARY_FN_P6", "lastName": "CANARY_LN_P6", "email": "CANARY_EM_P6@example.invalid", "userType": "employee" },
+      "hris": { "userType": "Employee", "managerId": "M600", "department": "Ops" },
+      "ad": {}
+    }
+  },
+  {
+    "id": "P7", "category": "contractor", "region": "US",
+    "profiles": {
+      "okta": { "firstName": "CANARY_FN_P7", "lastName": "CANARY_LN_P7", "email": "CANARY_EM_P7@example.invalid", "userType": "contractor" },
+      "hris": { "userType": "contractor", "managerId": "M700", "department": "Legal" },
+      "ad": {}
+    }
+  },
+  {
+    "id": "P8", "category": "employee", "region": "US",
+    "profiles": {
+      "okta": { "firstName": "CANARY_FN_P8", "lastName": "CANARY_LN_P8", "email": "CANARY_EM_P8@example.invalid", "userType": "employee" },
+      "hris": { "userType": "employee", "managerId": "M800", "department": "Design" },
+      "ad": {}
+    }
+  }
+]

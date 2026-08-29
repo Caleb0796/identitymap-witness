@@ -62,7 +62,7 @@ store semantics §8). **Eval:** `EVAL.md` r2 (layers, scorer, ablation, K-gates)
   (`String.toLowerCase(user.userType) == "contractor" ? …`), plain `user.managerId`,
   priority `["hris","ad"]`, no pins. This is what a saved-state reader sees.
 
-- [ ] **Step 1: package.json + .gitignore**
+- [x] **Step 1: package.json + .gitignore**
 
 ```json
 {
@@ -75,7 +75,7 @@ store semantics §8). **Eval:** `EVAL.md` r2 (layers, scorer, ablation, K-gates)
 ```
 `.gitignore`: `node_modules/`, `eval/out/tmp-*`, `.claude/.ralph-loop.local.md`, `chrome-profile-*/`
 
-- [ ] **Step 2: Write the failing fixture test**
+- [x] **Step 2: Write the failing fixture test**
 
 ```js
 // tests/fixture.test.mjs
@@ -117,9 +117,9 @@ test("snapshot: corrected exprs, hris-first, no pins", async () => {
 });
 ```
 
-- [ ] **Step 3: `npm test` → verify FAIL (ENOENT)**
-- [ ] **Step 4: Author personas (P1 clean baseline, P2 "Contractor", P3 EU managerless, P4 dept conflict, P5 ad-empty dept, P6 employee mixed-case group source, P7 lowercase contractor mapped correctly, P8 spare clean), then hand-walk SPEC §6 over SPEC §4 in `data/golden-walk.md` (a table: persona × field → value, prov source, violated pin, defect class — every row derived on paper), transcribe into oracle.json + defects.md, author persisted-snapshot.json**
-- [ ] **Step 5: `npm test` green → commit** `T1: golden contract — fixture, hand-walk, oracle, snapshot`
+- [x] **Step 3: `npm test` → verify FAIL (ENOENT)**
+- [x] **Step 4: Author personas (P1 clean baseline, P2 "Contractor", P3 EU managerless, P4 dept conflict, P5 ad-empty dept, P6 employee mixed-case group source, P7 lowercase contractor mapped correctly, P8 spare clean), then hand-walk SPEC §6 over SPEC §4 in `data/golden-walk.md` (a table: persona × field → value, prov source, violated pin, defect class — every row derived on paper), transcribe into oracle.json + defects.md, author persisted-snapshot.json**
+- [x] **Step 5: `npm test` green → commit** `T1: golden contract — fixture, hand-walk, oracle, snapshot`
 
 ---
 
