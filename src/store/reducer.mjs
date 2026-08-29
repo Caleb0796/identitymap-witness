@@ -34,9 +34,14 @@ export function createStore(initial) {
           break;
         }
         case "PIN_INVARIANTS": {
-          const before = new Set(state.pins.map((p) => p.id));
-          const after = new Set(action.invariants.map((p) => p.id));
-          const changed = [...new Set([...before, ...after])].filter((id) => before.has(id) !== after.has(id));
+          // SAFETY (run2 review): a pin "changes" when its MEMBERSHIP changes OR
+          // its canonical rule CONTENT changes under an unchanged id — either way
+          // evidence that checked it must die.
+          const canon = (p) => JSON.stringify(Object.fromEntries(Object.entries(p).sort()));
+          const before = new Map(state.pins.map((p) => [p.id, canon(p)]));
+          const after = new Map(action.invariants.map((p) => [p.id, canon(p)]));
+          const changed = [...new Set([...before.keys(), ...after.keys()])]
+            .filter((id) => before.get(id) !== after.get(id));
           state.pins = structuredClone(action.invariants);
           state.revision += 1;
           staleWhere((e) => e.fingerprint.invariants.some((id) => changed.includes(id)));

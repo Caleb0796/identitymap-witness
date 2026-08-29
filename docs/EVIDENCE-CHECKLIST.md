@@ -15,7 +15,9 @@ records before ours; conflicts resolve in outpocket's favor until their D5).
       witness round trip AND the stale/recovery beat live (edit managerId in the
       grid mid-session; watch the packet get rejected). Capture
       `evidence/chatgpt-run.png` + transcribe to `evidence/chatgpt-run.json`
-      (V1 style: transcribe only what the pixels show, never infer).
+      (V1 style: transcribe only what the pixels show, never infer). The JSON
+      MUST carry at least `{origin, toolCount: 5, staleRejectionObserved: true}` —
+      verify.mjs content-validates these fields, not just file existence.
 - [ ] **Oracle audit** (60m): row-by-row check of `data/golden-walk.md` against
       SPEC §6 by hand; then flip `data/oracle.json` `audited:true` and commit with
       trailer `Oracle-Audited: yes`. `eval/run.mjs` must then exit 0.

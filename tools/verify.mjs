@@ -52,7 +52,13 @@ if (unit || smoke || e2e || evalRun) status("INCOMPLETE a gate is red (see gate 
 
 for (const [item, probe] of [
   ["deploy: live URL in README", async () => /https:\/\/\S+onrender\.com/.test(await readFile(new URL("../README.md", import.meta.url), "utf8"))],
-  ["ChatGPT-browser evidence PNG", async () => existsSync(new URL("../evidence/chatgpt-run.png", import.meta.url))],
+  ["ChatGPT-browser evidence (PNG + content-validated JSON)", async () => {
+    if (!existsSync(new URL("../evidence/chatgpt-run.png", import.meta.url))) return false;
+    try { // run2 review: existence is not evidence — the transcription must SHOW the result
+      const j = JSON.parse(await readFile(new URL("../evidence/chatgpt-run.json", import.meta.url), "utf8"));
+      return j.toolCount === 5 && j.staleRejectionObserved === true && typeof j.origin === "string" && j.origin.includes("onrender.com");
+    } catch { return false; }
+  }],
   ["oracle audit flipped", async () => JSON.parse(await readFile(new URL("../data/oracle.json", import.meta.url))).audited === true],
   ["video recorded", async () => existsSync(new URL("../evidence/video-final.txt", import.meta.url))],
   ["Devpost submitted", async () => existsSync(new URL("../evidence/devpost-submitted.txt", import.meta.url))],

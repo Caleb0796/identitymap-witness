@@ -176,8 +176,11 @@ tool exists.
 **prepare_mapping_review** (readOnly true — records a packet)
 - in: `{expectedRevision, evidenceIds: [string]}`
 - Fails `STALE_EVIDENCE {staleIds}` if ANY referenced evidence is stale.
-  Packet-green rule: every current pin id appears in the union of the referenced
-  evidences' fingerprints AND no violation remains un-resolved in the newest
+  Packet-green rule (r3, run2 safety fix): only CLOSING evidence — kinds
+  `counterexample` and `clean-sweep`, which assert on the CURRENT draft — counts
+  toward coverage; `patch-preview` evidence is hypothetical and can never close a
+  pin. Every current pin id must appear in the union of the CLOSING evidences'
+  fingerprints AND no violation remains un-resolved in the newest closing
   evidence per pin → `blockers: []`; otherwise blockers list
   `{pin, reason: "uncovered"|"violating"}`. `PII_GUARD` if the canary sweep of the
   assembled packet trips. out: `{revision, packetId, coverage, blockers}`.
@@ -195,8 +198,9 @@ tool exists.
 - Invalidation: `EDIT_EXPRESSION(f)` stales evidence with `f ∈ fingerprint.fields`;
   `SET_PRIORITY` stales ALL evidence (priority feeds every resolution);
   `PIN_INVARIANTS`/`UNPIN` stale evidence whose `fingerprint.invariants` changed
-  membership — AND packet-green re-checks pin coverage regardless, so a new pin
-  makes old packets incomplete-by-coverage even where evidence stays fresh.
+  membership OR whose canonical rule CONTENT changed under an unchanged id (r3,
+  run2 safety fix) — AND packet-green re-checks pin coverage regardless, so a new
+  pin makes old packets incomplete-by-coverage even where evidence stays fresh.
 - Consequence stated honestly: a `find_…` evidence stales on ANY expression edit
   (its fingerprint spans all fields). "Fingerprint-exact" earns its name on
   `preview_…` evidence and on the invariant axis. SPEC §2's wording matches this.

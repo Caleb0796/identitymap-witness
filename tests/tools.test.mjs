@@ -158,3 +158,28 @@ test("no CANARY_ ever leaves any tool across the full fixture", async () => {
   assert.equal(d.before, "<redacted:changed>");
   assert.equal(d.after, "<redacted:changed>");
 });
+
+test("SAFETY: a hypothetical preview must NOT close a real packet (run2 finding)", async () => {
+  const { store, personas } = await golden();
+  stagePins(store, personas); // r18 — draft still defective
+  const prev = runTool(store, personas, "preview_mapping_patch", {
+    expectedRevision: 18, field: "group",
+    expr: 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"',
+    personaIds: ["P2"],
+  });
+  assert.ok(prev.ok);
+  const prep = runTool(store, personas, "prepare_mapping_review",
+    { expectedRevision: 18, evidenceIds: [prev.payload.evidenceId] });
+  assert.ok(prep.ok);
+  // the draft is UNCHANGED and defective — preview evidence is hypothetical and
+  // must leave every pin uncovered, never produce blockers: []
+  assert.equal(prep.payload.blockers.length, 3, JSON.stringify(prep.payload));
+  assert.ok(prep.payload.blockers.every((b) => b.reason === "uncovered"));
+});
+
+test("error precedence: stale revision wins over INVALID_AST and UNKNOWN_PERSONA", async () => {
+  const { store, personas } = await golden();
+  const r = runTool(store, personas, "preview_mapping_patch",
+    { expectedRevision: 99, field: "group", expr: "fetch('x')", personaIds: ["P99"] });
+  assert.equal(r.error.code, "REVISION_MISMATCH");
+});

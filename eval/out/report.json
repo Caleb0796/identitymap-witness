@@ -1,6 +1,6 @@
 {
-  "when": "2026-08-29T21:31:14.708Z",
-  "sha": "58846d2",
+  "when": "2026-08-29T23:55:33.166Z",
+  "sha": "a559c6f",
   "layers": {
     "unit": {
       "exit": 0
@@ -13,7 +13,7 @@
     }
   },
   "scorer": {
-    "traceFile": "eval/out/relay-c52fb00.json",
+    "traceFile": "eval/out/relay-daae768.json",
     "classes": {
       "DC1": true,
       "DC2": true,

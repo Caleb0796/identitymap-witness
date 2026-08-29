@@ -53,3 +53,22 @@ test("no size-2 subset covers all three invariants (minimality is real, not asse
     for (let j = i + 1; j < violating.length; j++)
       assert.ok(!covers([violating[i], violating[j]]), `pair ${violating[i]},${violating[j]} should not cover`);
 });
+
+test("adversarial anti-greedy case: exhaustive search returns the optimal 2, not greedy 3", () => {
+  // persona A misses deps 1-4, B misses 1,2,5, C misses 3,4,6; every f_k maps to ""
+  // greedy picks A first and needs 3 personas; the optimum is {B,C}.
+  const fields = ["f1", "f2", "f3", "f4", "f5", "f6"];
+  const state = {
+    revision: 1, priority: ["hris", "ad"],
+    expressions: Object.fromEntries(fields.map((f) => [f, '""'])),
+    pins: fields.map((f, i) => ({ id: `n${i + 1}`, type: "null_if_missing", field: f, dependsOn: `d${i + 1}` })),
+  };
+  const has = (deps) => ({ okta: Object.fromEntries(deps.map((d) => [d, "x"])), hris: {}, ad: {} });
+  const personas = [
+    { id: "A", category: "employee", profiles: has(["d5", "d6"]) },
+    { id: "B", category: "employee", profiles: has(["d3", "d4", "d6"]) },
+    { id: "C", category: "employee", profiles: has(["d1", "d2", "d5"]) },
+  ];
+  const r = findWitness(state, personas);
+  assert.deepEqual(r.personaIds, ["B", "C"]);
+});

@@ -75,3 +75,14 @@ test("clean-to-violating edit is caught: stale old evidence, fresh find sees it"
   assert.deepEqual(dirty.personaIds, ["P3"]);
   assert.equal(dirty.violations[0].invariantId, "inv-null");
 });
+
+test("SAFETY: same-ID pin CONTENT replacement stales dependent evidence (run2 finding)", () => {
+  const s = createStore(GOLDEN_STATE);
+  s.dispatch({ type: "PIN_INVARIANTS", invariants: PINS });
+  const e = s.recordEvidence("clean-sweep",
+    { fields: Object.keys(GOLDEN_STATE.expressions), invariants: PIN_IDS, personas: ALL8 }, { violations: [] });
+  const swapped = PINS.map((p) => p.id === "inv-sot" ? { ...p, source: "ad" } : p); // same ids, different rule
+  s.dispatch({ type: "PIN_INVARIANTS", invariants: swapped });
+  assert.equal(s.getState().evidence[e].stale, true,
+    "rule content changed under an unchanged id — old evidence must die");
+});

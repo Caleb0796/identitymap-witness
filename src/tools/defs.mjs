@@ -127,13 +127,18 @@ const HANDLERS = {
     const staleIds = ids.filter((id) => !s.evidence[id] || s.evidence[id].stale);
     if (staleIds.length) return failure("STALE_EVIDENCE", { staleIds });
     const evidences = ids.map((id) => s.evidence[id]);
-    const coveredPins = new Set(evidences.flatMap((e) => e.fingerprint.invariants));
+    // SAFETY (run2 review): only evidence that asserts on the CURRENT draft may
+    // close a pin. A patch-preview is hypothetical — the draft was never edited —
+    // so it can ride along in a packet but never counts toward coverage.
+    const CLOSING_KINDS = new Set(["counterexample", "clean-sweep"]);
+    const closing = evidences.filter((e) => CLOSING_KINDS.has(e.kind));
+    const coveredPins = new Set(closing.flatMap((e) => e.fingerprint.invariants));
     const coverage = {};
     const blockers = [];
     for (const pin of s.pins) {
       coverage[pin.id] = coveredPins.has(pin.id);
       if (!coverage[pin.id]) { blockers.push({ pin: pin.id, reason: "uncovered" }); continue; }
-      const newest = evidences.filter((e) => e.fingerprint.invariants.includes(pin.id)).at(-1);
+      const newest = closing.filter((e) => e.fingerprint.invariants.includes(pin.id)).at(-1);
       const stillViolating = (newest.payload.violations ?? []).some((v) => v.invariantId === pin.id);
       if (stillViolating) blockers.push({ pin: pin.id, reason: "violating" });
     }
