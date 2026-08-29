@@ -1,0 +1,508 @@
+{
+  "sha": "58846d2",
+  "when": "2026-08-29T21:31:14.385Z",
+  "rounds": 10,
+  "trace": [
+    {
+      "round": 1,
+      "kind": "tool",
+      "toolName": "read_mapping_session",
+      "input": {},
+      "invocationId": "4FE09F716DC46753EF04814BC9075646",
+      "status": "Completed",
+      "matched": true,
+      "ms": 1,
+      "payload": {
+        "revision": 17,
+        "priority": [
+          "ad",
+          "hris"
+        ],
+        "fields": [
+          {
+            "field": "displayName",
+            "expr": "user.firstName + \" \" + user.lastName",
+            "defectFree": null
+          },
+          {
+            "field": "group",
+            "expr": "user.userType == \"contractor\" ? \"contractors\" : \"employees\"",
+            "defectFree": null
+          },
+          {
+            "field": "managerId",
+            "expr": "user.managerId == null ? \"\" : user.managerId",
+            "defectFree": null
+          },
+          {
+            "field": "department",
+            "expr": "user.department",
+            "defectFree": null
+          },
+          {
+            "field": "email",
+            "expr": "user.email",
+            "defectFree": null
+          }
+        ],
+        "pinIds": [],
+        "personaCount": 8
+      }
+    },
+    {
+      "round": 2,
+      "kind": "tool",
+      "toolName": "stage_mapping_invariants",
+      "input": {
+        "expectedRevision": 17,
+        "invariants": [
+          {
+            "id": "inv-forbid",
+            "type": "forbidden_group",
+            "personaCategory": "contractor",
+            "group": "employees"
+          },
+          {
+            "id": "inv-null",
+            "type": "null_if_missing",
+            "field": "managerId",
+            "dependsOn": "managerId"
+          },
+          {
+            "id": "inv-sot",
+            "type": "source_of_truth",
+            "field": "department",
+            "source": "hris"
+          }
+        ]
+      },
+      "invocationId": "332948DC16F5AA0ED70C34ECB4CB1942",
+      "status": "Completed",
+      "matched": true,
+      "ms": 0,
+      "payload": {
+        "revision": 18,
+        "pinIds": [
+          "inv-forbid",
+          "inv-null",
+          "inv-sot"
+        ]
+      }
+    },
+    {
+      "round": 3,
+      "kind": "tool",
+      "toolName": "find_mapping_counterexample",
+      "input": {
+        "expectedRevision": 18
+      },
+      "invocationId": "7E3FC8810CAA305A3A92B635CD9FFDB2",
+      "status": "Completed",
+      "matched": true,
+      "ms": 1,
+      "payload": {
+        "revision": 18,
+        "personaIds": [
+          "P2",
+          "P3",
+          "P4"
+        ],
+        "violations": [
+          {
+            "invariantId": "inv-forbid",
+            "personaId": "P2",
+            "field": "group",
+            "detail": "category contractor mapped into forbidden group employees"
+          },
+          {
+            "invariantId": "inv-null",
+            "personaId": "P3",
+            "field": "managerId",
+            "detail": "no source supplies managerId; target must be null, got \"\""
+          },
+          {
+            "invariantId": "inv-sot",
+            "personaId": "P4",
+            "field": "department",
+            "detail": "hris holds \"Engineering\" but value came from ad"
+          },
+          {
+            "invariantId": "inv-sot",
+            "personaId": "P5",
+            "field": "department",
+            "detail": "hris holds \"Finance\" but value came from ad"
+          }
+        ],
+        "coverage": {
+          "inv-forbid": true,
+          "inv-null": true,
+          "inv-sot": true
+        },
+        "evidenceIds": [
+          "E-1"
+        ]
+      }
+    },
+    {
+      "round": 4,
+      "kind": "human-sim",
+      "action": {
+        "type": "EDIT_EXPRESSION",
+        "field": "managerId",
+        "expr": "user.managerId"
+      },
+      "revisionAfter": 19
+    },
+    {
+      "round": 5,
+      "kind": "tool",
+      "toolName": "prepare_mapping_review",
+      "input": {
+        "expectedRevision": 19,
+        "evidenceIds": [
+          "E-1"
+        ]
+      },
+      "invocationId": "04218128EA8C457DF532AECEE071D168",
+      "status": "Completed",
+      "matched": true,
+      "ms": 2,
+      "payload": {
+        "error": {
+          "code": "STALE_EVIDENCE",
+          "staleIds": [
+            "E-1"
+          ]
+        }
+      }
+    },
+    {
+      "round": 6,
+      "kind": "tool",
+      "toolName": "find_mapping_counterexample",
+      "input": {
+        "expectedRevision": 19
+      },
+      "invocationId": "0BE1DCD8C65F28A9965173D661879C4D",
+      "status": "Completed",
+      "matched": true,
+      "ms": 13,
+      "payload": {
+        "revision": 19,
+        "personaIds": [
+          "P2",
+          "P4"
+        ],
+        "violations": [
+          {
+            "invariantId": "inv-forbid",
+            "personaId": "P2",
+            "field": "group",
+            "detail": "category contractor mapped into forbidden group employees"
+          },
+          {
+            "invariantId": "inv-sot",
+            "personaId": "P4",
+            "field": "department",
+            "detail": "hris holds \"Engineering\" but value came from ad"
+          },
+          {
+            "invariantId": "inv-sot",
+            "personaId": "P5",
+            "field": "department",
+            "detail": "hris holds \"Finance\" but value came from ad"
+          }
+        ],
+        "coverage": {
+          "inv-forbid": true,
+          "inv-null": false,
+          "inv-sot": true
+        },
+        "evidenceIds": [
+          "E-2"
+        ]
+      }
+    },
+    {
+      "round": 7,
+      "kind": "tool",
+      "toolName": "preview_mapping_patch",
+      "input": {
+        "expectedRevision": 19,
+        "field": "group",
+        "expr": "String.toLowerCase(user.userType) == \"contractor\" ? \"contractors\" : \"employees\"",
+        "personaIds": [
+          "P2"
+        ]
+      },
+      "invocationId": "DCF559CFE2A9E33C84F7F245715D0670",
+      "status": "Completed",
+      "matched": true,
+      "ms": 1,
+      "payload": {
+        "revision": 19,
+        "field": "group",
+        "diffs": [
+          {
+            "personaId": "P2",
+            "field": "group",
+            "before": "employees",
+            "after": "contractors"
+          }
+        ],
+        "remainingViolations": 0,
+        "evidenceId": "E-3"
+      }
+    },
+    {
+      "round": 8,
+      "kind": "human-sim",
+      "action": {
+        "type": "EDIT_EXPRESSION",
+        "field": "group",
+        "expr": "String.toLowerCase(user.userType) == \"contractor\" ? \"contractors\" : \"employees\""
+      },
+      "revisionAfter": 20
+    },
+    {
+      "round": 8,
+      "kind": "human-sim",
+      "action": {
+        "type": "SET_PRIORITY",
+        "priority": [
+          "hris",
+          "ad"
+        ]
+      },
+      "revisionAfter": 21
+    },
+    {
+      "round": 8,
+      "kind": "tool",
+      "toolName": "find_mapping_counterexample",
+      "input": {
+        "expectedRevision": 21
+      },
+      "invocationId": "4E76953594E1DA77AF664EC585D241AA",
+      "status": "Completed",
+      "matched": true,
+      "ms": 2,
+      "payload": {
+        "error": {
+          "code": "NO_COUNTEREXAMPLE",
+          "checked": 8,
+          "evidenceIds": [
+            "E-4"
+          ]
+        }
+      }
+    },
+    {
+      "round": 8,
+      "kind": "tool",
+      "toolName": "prepare_mapping_review",
+      "input": {
+        "expectedRevision": 21,
+        "evidenceIds": [
+          "E-4"
+        ]
+      },
+      "invocationId": "3420909B6560C69684C7B579883A0906",
+      "status": "Completed",
+      "matched": true,
+      "ms": 0,
+      "payload": {
+        "revision": 21,
+        "packetId": "PKT-5",
+        "coverage": {
+          "inv-forbid": true,
+          "inv-null": true,
+          "inv-sot": true
+        },
+        "blockers": []
+      }
+    },
+    {
+      "round": 9,
+      "kind": "tool",
+      "toolName": "find_mapping_counterexample",
+      "input": {
+        "expectedRevision": 17
+      },
+      "invocationId": "F7925DFCA0A26634331B2898E3C24515",
+      "status": "Completed",
+      "matched": true,
+      "ms": 1,
+      "payload": {
+        "error": {
+          "code": "REVISION_MISMATCH",
+          "currentRevision": 21
+        }
+      }
+    },
+    {
+      "round": 9,
+      "kind": "tool",
+      "toolName": "find_mapping_counterexample",
+      "input": {
+        "expectedRevision": 21
+      },
+      "invocationId": "E37843473D14DE9C85A9B0F2AEC16DF1",
+      "status": "Completed",
+      "matched": true,
+      "ms": 1,
+      "payload": {
+        "error": {
+          "code": "NO_COUNTEREXAMPLE",
+          "checked": 8,
+          "evidenceIds": [
+            "E-6"
+          ]
+        }
+      }
+    },
+    {
+      "round": 10,
+      "kind": "tool",
+      "toolName": "stage_mapping_invariants",
+      "input": {
+        "expectedRevision": 21,
+        "invariants": [
+          {
+            "id": "inv-forbid",
+            "type": "forbidden_group",
+            "personaCategory": "contractor",
+            "group": "employees"
+          },
+          {
+            "id": "inv-null",
+            "type": "null_if_missing",
+            "field": "managerId",
+            "dependsOn": "managerId"
+          },
+          {
+            "id": "inv-sot",
+            "type": "source_of_truth",
+            "field": "department",
+            "source": "hris"
+          },
+          {
+            "id": "pin-extra",
+            "type": "forbidden_group",
+            "personaCategory": "nobody",
+            "group": "nothing"
+          }
+        ]
+      },
+      "invocationId": "1E7F758196ACEFAB9F35506FA08ECE57",
+      "status": "Completed",
+      "matched": true,
+      "ms": 0,
+      "payload": {
+        "revision": 22,
+        "pinIds": [
+          "inv-forbid",
+          "inv-null",
+          "inv-sot",
+          "pin-extra"
+        ]
+      }
+    },
+    {
+      "round": 10,
+      "kind": "tool",
+      "toolName": "prepare_mapping_review",
+      "input": {
+        "expectedRevision": 22,
+        "evidenceIds": [
+          "E-4"
+        ]
+      },
+      "invocationId": "DED99BE0FFE5D4ADCEBA94069674827C",
+      "status": "Completed",
+      "matched": true,
+      "ms": 1,
+      "payload": {
+        "revision": 22,
+        "packetId": "PKT-7",
+        "coverage": {
+          "inv-forbid": true,
+          "inv-null": true,
+          "inv-sot": true,
+          "pin-extra": false
+        },
+        "blockers": [
+          {
+            "pin": "pin-extra",
+            "reason": "uncovered"
+          }
+        ]
+      }
+    },
+    {
+      "round": 10,
+      "kind": "tool",
+      "toolName": "stage_mapping_invariants",
+      "input": {
+        "expectedRevision": 22,
+        "invariants": [
+          {
+            "id": "inv-forbid",
+            "type": "forbidden_group",
+            "personaCategory": "contractor",
+            "group": "employees"
+          },
+          {
+            "id": "inv-null",
+            "type": "null_if_missing",
+            "field": "managerId",
+            "dependsOn": "managerId"
+          },
+          {
+            "id": "inv-sot",
+            "type": "source_of_truth",
+            "field": "department",
+            "source": "hris"
+          }
+        ]
+      },
+      "invocationId": "AEBD02C4F5C812E2742A70BDDBBA9F25",
+      "status": "Completed",
+      "matched": true,
+      "ms": 1,
+      "payload": {
+        "revision": 23,
+        "pinIds": [
+          "inv-forbid",
+          "inv-null",
+          "inv-sot"
+        ]
+      }
+    },
+    {
+      "round": 10,
+      "kind": "tool",
+      "toolName": "prepare_mapping_review",
+      "input": {
+        "expectedRevision": 23,
+        "evidenceIds": [
+          "E-4"
+        ]
+      },
+      "invocationId": "CF0AC45E9B079E5EA93CDBE53352ED6C",
+      "status": "Completed",
+      "matched": true,
+      "ms": 0,
+      "payload": {
+        "revision": 23,
+        "packetId": "PKT-8",
+        "coverage": {
+          "inv-forbid": true,
+          "inv-null": true,
+          "inv-sot": true
+        },
+        "blockers": []
+      }
+    }
+  ]
+}

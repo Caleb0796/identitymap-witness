@@ -373,11 +373,11 @@ clock+artifact conditions from EVAL.md). CODE_COMPLETE does NOT claim
 ENTRY_READY — the human checklist in `docs/EVIDENCE-CHECKLIST.md` owns that
 (deploy, ChatGPT evidence, oracle audit flip, video, Devpost, flip-public).
 
-- [ ] **Step 1: write verify.mjs + render.yaml (publish `.`, no build) + the three
+- [x] **Step 1: write verify.mjs + render.yaml (publish `.`, no build) + the three
   docs in full prose (30s/3min shot lists from SPEC §11; Devpost 4 answers with
   concessions #1/#2 up front; evidence checklist with the five human tasks + the
   remote stale/recovery beat)**
-- [ ] **Step 2: `node tools/verify.mjs` prints STATUS INCOMPLETE naming exactly the
+- [x] **Step 2: `node tools/verify.mjs` prints STATUS INCOMPLETE naming exactly the
   human-gated remainder → commit** `T12: verifier + deploy + submission docs`
 - [ ] **Step 3: loop protocol — when verify prints `STATUS CODE_COMPLETE`, append
   the line to PROGRESS.md and output `<promise>IDENTITYMAP HALT</promise>`; when it

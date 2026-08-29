@@ -13,9 +13,19 @@ evidence invalidation when the human edits mid-session. The agent never applies.
 - Build plan: `docs/plans/2026-08-29-identitymap-witness.md`. Execution: `RALPH.md`.
 - Key third-party evidence: `evidence/okta-public-api-2026-08-29.md`.
 
-Status: plan r2 — reviewed by codex gpt-5.6-sol (ultra) 2026-08-29, all 17 P1
-findings addressed or scope-cut (`reviews/codex-sol-2026-08-29.md`); reviewer's
-win estimate 3% as-planned / 12% with fixes. Awaiting go/no-go before loop start.
+Status 2026-08-29 EOD: **CODE_COMPLETE candidate** — T1–T12 built and green
+(70+ unit tests… run `npm test` for the live number; smoke ×3 cold sessions;
+10-round E2E with stale-rejection/recovery/pin-coverage; eval 9/9 thresholds,
+PASS-UNAUDITED pending the human oracle audit). Plan r2 followed after the
+gpt-5.6-sol ultra review (`reviews/codex-sol-2026-08-29.md`, win estimate 12%
+with fixes — all 17 P1s addressed). Remaining work is the human checklist:
+`docs/EVIDENCE-CHECKLIST.md` (deploy → live URL goes here, ChatGPT evidence,
+oracle audit, video, submission).
+
+Benchmark honesty: the API comparison is a labeled persisted-state ABLATION
+(0/4 session defects visible pre-save, by construction). Browser-Use and
+Full-CDP arms are **designed, not run**. The scripted relay is protocol E2E;
+the agent-quality evidence is the human ChatGPT-browser run.
 
 ```bash
 npm test                        # layer 1
