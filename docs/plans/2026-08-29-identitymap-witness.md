@@ -207,14 +207,14 @@ fn:"upper"|"lower", arg}`, `{k:"concat", parts}`, `{k:"eq"|"neq", l, r}`,
 `prov = {source, branch, candidates: [{source, present, value}], inputs: [{ref, source}]}`.
 Resolution/null/empty semantics per SPEC §6 exactly.
 
-- [ ] **Step 1: Failing tests** — semantics table (priority order; DC4
+- [x] **Step 1: Failing tests** — semantics table (priority order; DC4
   present-but-empty wins; null poisons concat, "" does not; `"" == null` false;
   branch capture); candidates chain includes losing `hris` for P4-shaped input.
   `tests/golden.test.mjs`: evaluate SPEC §4 golden expressions over ALL personas
   and deepEqual against `oracle.expectedValues` (machine now reproduces the
   hand-walk — review P1 #2's guard).
-- [ ] **Step 2: FAIL** → **Step 3: implement (≈90 lines)** → **Step 4: green**
-- [ ] **Step 5: Commit** `T4: evaluator + candidates provenance + golden cross-check`
+- [x] **Step 2: FAIL** → **Step 3: implement (≈90 lines)** → **Step 4: green**
+- [x] **Step 5: Commit** `T4: evaluator + candidates provenance + golden cross-check`
 
 ---
 
