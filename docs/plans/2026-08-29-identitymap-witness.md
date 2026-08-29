@@ -300,10 +300,10 @@ arrays: `CANARY_`-bearing strings → `"<redacted>"`; identity-field diffs →
 `"<redacted:changed>"`); `assertNoCanary(p)` throws `{code:"PII_GUARD"}`. Tool
 layer calls redact THEN assert.
 
-- [ ] **Step 1: Failing tests** — nested candidates/diffs scrubbed; canary in a
+- [x] **Step 1: Failing tests** — nested candidates/diffs scrubbed; canary in a
   KEY caught; non-identity values untouched; crafted post-redaction leak throws.
-- [ ] **Step 2: FAIL** → **Step 3: implement (≈40 lines)** → **Step 4: green**
-- [ ] **Step 5: Commit** `T8: redaction + canary guard`
+- [x] **Step 2: FAIL** → **Step 3: implement (≈40 lines)** → **Step 4: green**
+- [x] **Step 5: Commit** `T8: redaction + canary guard`
 
 ---
 
