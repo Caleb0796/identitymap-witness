@@ -188,14 +188,14 @@ for (const t of TOOLS) {
 fn:"upper"|"lower", arg}`, `{k:"concat", parts}`, `{k:"eq"|"neq", l, r}`,
 `{k:"ternary", cond, then, else}`. Errors: `{code:"INVALID_AST", position}`.
 
-- [ ] **Step 1: Failing tests** — the four SPEC §4 draft expressions parse to
+- [x] **Step 1: Failing tests** — the four SPEC §4 draft expressions parse to
   exact ASTs (write all four as deepEqual cases); rejects
   `['appuser.x', 'user[0]', 'fetch("x")', 'a && b', 'user.', '1 + 2', 'x ? y']`
   each with INVALID_AST + numeric `position`.
-- [ ] **Step 2: run → FAIL**
-- [ ] **Step 3: Implement (tokenizer + recursive descent, ≈90 lines)**
-- [ ] **Step 4: `npm test` green**
-- [ ] **Step 5: Commit** `T3: EL subset parser`
+- [x] **Step 2: run → FAIL**
+- [x] **Step 3: Implement (tokenizer + recursive descent, ≈90 lines)**
+- [x] **Step 4: `npm test` green**
+- [x] **Step 5: Commit** `T3: EL subset parser`
 
 ---
 
