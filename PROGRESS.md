@@ -10,3 +10,4 @@
 2026-08-29T21:27:39Z T10 green — e2e 10 rounds exit 0; stale rejection r5, recovery r9, pin-coverage r10; trace committed
 2026-08-29T21:28:54Z T11 green — eval/run.mjs: 9/9 thresholds ok, ablation 0/4 labeled, RESULT PASS-UNAUDITED exit 2
 2026-08-29T21:31:32Z T12 green — tools/verify.mjs STATUS CODE_COMPLETE exit 0; human checklist: 5 TODOs
+2026-08-29T22:50:38Z DEPLOY done — https://identitymap-witness.onrender.com live; 4 paths 200+MIME ok; remote smoke: present, 5 tools, roundtrip r17
