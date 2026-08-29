@@ -243,11 +243,11 @@ coverage}` — evaluates all personas, checks all pins, then exhaustive subset s
 (personas ≤ 8 ⇒ ≤255 non-empty subsets) for the smallest set covering every
 violated invariant; ties → lexicographic persona order.
 
-- [ ] **Step 1: Failing tests** — golden: coverage all-true, `personaIds` equals
+- [x] **Step 1: Failing tests** — golden: coverage all-true, `personaIds` equals
   one of oracle.minimalWitness.sets (size 3); single-pin case → size 1; clean
   snapshot state → `{personaIds: [], violations: []}`.
-- [ ] **Step 2: FAIL** → **Step 3: implement (≈50 lines)** → **Step 4: green**
-- [ ] **Step 5: Commit** `T6: exhaustive minimal witness`
+- [x] **Step 2: FAIL** → **Step 3: implement (≈50 lines)** → **Step 4: green**
+- [x] **Step 5: Commit** `T6: exhaustive minimal witness`
 
 ---
 
