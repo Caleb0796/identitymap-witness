@@ -7,7 +7,9 @@ records before ours; conflicts resolve in outpocket's favor until their D5).
 
 - [ ] **Deploy** (20m): Render static site from `render.yaml` (publish path `.`).
       Paste the live URL into README.md. Verify `/`, `/app.js`,
-      `/data/personas.json` all load from the remote origin.
+      `/data/personas.json` load from the remote origin, AND that
+      `/src/tools/defs.mjs` comes back with a JavaScript content-type
+      (module loading dies silently on a wrong `.mjs` MIME).
 - [ ] **ChatGPT-browser evidence** (45m): ⌘T to the deployed URL in the ChatGPT
       built-in browser. Consent gate → allow. Confirm 5 tools listed. Run the
       witness round trip AND the stale/recovery beat live (edit managerId in the
