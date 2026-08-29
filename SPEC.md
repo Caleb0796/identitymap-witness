@@ -1,80 +1,97 @@
-# IdentityMap Witness — SPEC
+# IdentityMap Witness — SPEC (r2, post-review)
 
 Authority note: this file + `EVAL.md` + `docs/plans/2026-08-29-identitymap-witness.md`
-are the three authorities for this repo. Narrative docs (README) restate them and lose
-on conflict. Deadline: **Devpost 2026-09-03 13:00 PT** (verified 2026-08-29).
+are the three authorities. Narrative docs restate them and lose on conflict.
+Deadline: **Devpost 2026-09-03 13:00 PT**. r2 incorporates the 2026-08-29
+gpt-5.6-sol adversarial review (`reviews/codex-sol-2026-08-29.md`): direction cut,
+defective-by-design golden draft, full tool schemas, fingerprint invalidation,
+honest eval relabeling.
 
 ## 1. One line
 
-A profile-mapping workbench page where a human pins business invariants, an agent
-(via WebMCP) searches a synthetic persona pool for the **minimal counterexample set**
-that violates them against the **unsaved** mapping draft, with **redacted provenance**
-and **dependency-closure invalidation** when the human edits mid-session. Apply never
+A profile-mapping workbench page whose draft **contains today's unsaved mistakes**;
+a human pins business invariants, an agent (via WebMCP) finds the minimal persona
+set that witnesses the violations, with redacted provenance, and every human edit
+invalidates exactly the evidence whose recorded fingerprint it touches. Apply never
 belongs to the agent.
 
-## 2. The claim (narrowed — do not widen it back)
+## 2. The claim (narrowed twice — do not widen it back)
 
-CONCEDED, not claimed: "preview an unsaved mapping" is first-party standard.
-Okta Profile Mapping Preview, Auth0 Actions test-runner, Adobe/DocuSign field
-validation all do draft-preview. Any pitch sentence resting on "preview before save"
-is a defect (lint-worthy).
+CONCEDED #1: "preview an unsaved mapping" is first-party standard (Okta preview,
+Auth0 Actions test-runner, Adobe/DocuSign validation).
 
-CLAIMED (the only line we defend, end to end):
+CONCEDED #2 (the strongest rebuttal, stated before a judge says it): any page-local
+agent — DOM scraper, CDP, userscript — given the same dirty draft and pins could run
+the same deterministic engine. We do not claim impossibility anywhere.
 
-> Given invariants the human just wrote — which exist nowhere but this page —
-> the agent computes the minimal witness set over a persona pool, returns only
-> redacted categories + field-level provenance, and every human edit precisely
-> invalidates (and only invalidates) the evidence that depended on the edited paths.
+CLAIMED (all of it, nothing else):
 
-Baseline honesty: the API arm (`EVAL.md` arm B) gets the same deterministic engine.
-The measured gap it cannot close: unsaved expressions + unpersisted pins. Evidence:
-Okta public Profile Mappings API has exactly 3 endpoints (list/get/update), no
-preview/evaluate — see `evidence/okta-public-api-2026-08-29.md`.
+> The page AUTHORS the contract that makes agent help on dirty state safe and
+> cheap: five least-privilege tools, redaction at the source, revision fencing
+> with fingerprint-exact invalidation, and a minimal-witness search the human can
+> audit — demonstrated end-to-end with pre-registered checks, in the runtime the
+> challenge targets.
 
-## 3. Measured platform constraints (violating any of these = bug)
+Leverage story for judges: the loop consumes page-exclusive session state
+(unsaved expressions, unsaved priority order, never-persisted pins), updates the
+visible UI before every tool return, and survives a mid-session human edit. The
+persisted-state ablation (EVAL) quantifies WHICH defects exist only pre-save — as
+a workflow property, by construction, labeled as such.
 
-All measured in ~/mcp/outpocket (evidence/V0–V6, harness/drive.mjs) 2026-08-29:
+Evidence kept honest: Okta's public Profile Mappings API is list/get/update only
+(`evidence/okta-public-api-2026-08-29.md`); its admin-console preview XHR is
+undocumented and untested (disclosed).
+
+## 3. Measured platform constraints (violating any = bug)
+
+Measured in ~/mcp/outpocket (evidence/V0–V6, harness/drive.mjs) 2026-08-29:
 
 | # | Constraint | Source |
 |---|---|---|
-| C1 | API surface is `document.modelContext`. The identifier `navigator.modelContext` is dead and BANNED in code | V0/V1, BANNED.txt IR-1 |
-| C2 | Target demo runtime: ChatGPT built-in browser (Chromium 151), `document.modelContext` present | V1.png/V1.json |
-| C3 | Local automation: Chrome 152 + `--enable-features=WebMCP` (or `WebMCPTesting`, interchangeable) + fresh `--user-data-dir` per launch; flag required in every mode incl. headless | flag 实测 |
-| C4 | A tool call pending >~22.3s dies (measured in ChatGPT browser). NO tool may wait for human input. Two-phase handshake only: tool returns immediately; human acts in UI; agent re-reads new revision | V4 |
-| C5 | From page JS, `document.modelContext.executeTool(name, ...)` THROWS (wants a RegisteredTool handle). By-name automated calls go over CDP `WebMCP.invokeTool` → correlate `WebMCP.toolResponded` by invocationId; status Completed/Error/Canceled; unknown name = -32602 at send | drive.mjs |
-| C6 | `getTools()` returns a Promise — every count is `(await ...).length` | drive.mjs IR-18 |
-| C7 | `WebMCP.enable` returns OK even with no page API — never use as presence check; `Schema.getDomains` doesn't list WebMCP; the completed round trip is the only discriminator | drive.mjs |
-| C8 | Registration only in the top-level document; iframe/worker registration silently does nothing | HANDOVER §3 r11 |
-| C9 | Remote HTTPS origins trigger a human consent gate in the ChatGPT browser; localhost does not. The video MUST be recorded against the deployed remote origin, consent click included | V6 |
-| C10 | Registration call shape (working in prod at webmcp-probe): `document.modelContext.registerTool({name, description, inputSchema, annotations, execute: async (args) => ({content:[{type:"text", text}]})}, {signal})` | probe/index.html |
+| C1 | API surface is `document.modelContext`; identifier `navigator.modelContext` is dead and banned in `src/**`, `harness/**` | V0/V1 |
+| C2 | Demo runtime: ChatGPT built-in browser (Chromium 151), `document.modelContext` present | V1 |
+| C3 | Local automation: Chrome 152 + `--enable-features=WebMCP` (= `WebMCPTesting`) + fresh `--user-data-dir`; flag required in every mode | flag 实测 |
+| C4 | Tool call pending >~22.3s dies. No tool waits on a human. Two-phase handshake only | V4 |
+| C5 | Page-JS `executeTool(name,…)` throws; by-name calls go over CDP `WebMCP.invokeTool` → `WebMCP.toolResponded` correlated by invocationId; unknown name = -32602 at send | drive.mjs |
+| C6 | `getTools()` returns a Promise | drive.mjs |
+| C7 | `WebMCP.enable` returns OK with no page API — presence check is the completed round trip, nothing else | drive.mjs |
+| C8 | Registration top-level document only; iframe/worker registration silently does nothing | HANDOVER §3 r11 |
+| C9 | Remote HTTPS origins show a consent gate in the ChatGPT browser; localhost doesn't. Video records against the deployed remote origin, consent click included | V6 |
+| C10 | Registration shape (working in prod): `document.modelContext.registerTool({name, description, inputSchema, annotations, execute: async (args) => ({content:[{type:"text", text}]})}[, {signal}])`. The `{signal}` second argument is OPTIONAL and unused here (no dynamic unregistration in scope) | probe/index.html |
 
-## 4. State model
+## 4. Golden state (defective by design — this IS the demo)
+
+Direction is CUT from scope (r2): one mapping direction, Okta-sources → app.
+No `direction` field, no `appuser` namespace, no D1 defect class.
 
 ```js
-// src/store/reducer.mjs — single source of truth for the page
+// The dirty draft the page loads with. Four seeded session mistakes, keyed DC1–DC4.
 state = {
-  revision: 17,                       // bumps on EVERY mutation
-  direction: "user_to_app",           // or "app_to_user"
-  priority: ["hris", "ad"],           // source-of-record order for user.* attrs
-  expressions: {                      // the DIRTY mapping draft (target field -> EL string)
-    department: 'user.department',
-    managerId:  'user.managerId',
-    group:      'user.userType == "employee" ? "employees" : "contractors"',
-    email:      'user.email',
-    displayName:'user.firstName + " " + user.lastName',
+  revision: 17,
+  priority: ["ad", "hris"],            // DC3: author set AD first today; HRIS is truth
+  expressions: {
+    displayName: 'user.firstName + " " + user.lastName',                  // clean
+    group:       'user.userType == "contractor" ? "contractors" : "employees"', // DC1 trap: exact-case compare
+    managerId:   'user.managerId == null ? "" : user.managerId',          // DC2 trap: null coalesced to ""
+    department:  'user.department',                                       // resolves through DC3's bad priority; P5 adds DC4
+    email:       'user.email',                                            // clean
   },
-  pushModes: { department: "PUSH", managerId: "PUSH", group: "PUSH", email: "DONT_PUSH", displayName: "PUSH" },
-  pins: [],                           // human-pinned invariants (see §5), draft-only
-  evidence: {},                       // id -> {kind, revision, deps:{fields,invariants,personas}, stale, payload}
-  packets: {},                        // reviewPacketId -> {evidenceIds, revision, blockers}
+  pins: [],            // human pins §5 invariants during the demo — never persisted
+  evidence: {},        // id -> {kind, revision, fingerprint, stale, payload}
+  packets: {},         // id -> {evidenceIds, revision, pinsCovered, blockers}
 }
 ```
 
-Page-exclusive by construction: `expressions` edits, `pins`, `priority`, `direction`
-live only in the reducer until the human clicks the plain-UI Save (out of demo scope).
-The API arm receives a snapshot WITHOUT dirty edits and WITHOUT pins (see EVAL arm B).
+Expected violations under §5 pins + §7 fixture, HAND-WALKED in `data/golden-walk.md`
+before any engine code exists (plan T1):
+- P2 (userType `"Contractor"`, capital C) → group `"employees"` → **inv-forbid** (DC1)
+- P3 (EU, managerless) → managerId `""` ≠ null → **inv-null** (DC2)
+- P4 (ad "Sales" / hris "Engineering") → department from `ad` → **inv-sot** (DC3)
+- P5 (ad `""` / hris "Finance") → `""` present wins, source `ad` → **inv-sot** (DC4)
+- P1 baseline persona: zero violations (the "single test user all green" opening beat)
+Minimal witness over violated invariants: size **3** — `[P2,P3,P4]` or `[P2,P3,P5]`.
 
-## 5. Invariants (exactly 3 types — do not add a 4th before the deadline)
+## 5. Invariants (exactly 3 types)
 
 ```json
 [
@@ -84,85 +101,137 @@ The API arm receives a snapshot WITHOUT dirty edits and WITHOUT pins (see EVAL a
 ]
 ```
 
-Semantics (checker in `src/engine/invariants.mjs`):
-- `forbidden_group`: no persona whose `category` matches may map into `group` value.
-- `null_if_missing`: if no source supplies `dependsOn`, target field MUST be null (not "", not a default).
-- `source_of_truth`: target field's provenance.source MUST equal the named source whenever that source has a non-null value.
+Semantics (`src/engine/invariants.mjs`):
+- `forbidden_group`: persona.category matches (case-insensitive) ⇒ mapped group value
+  must not equal `group` (case-insensitive compare — the CHECKER is case-robust; the
+  defective EXPRESSION is not; that asymmetry is DC1).
+- `null_if_missing`: if no source supplies `dependsOn`, target MUST be `null` — `""` fails.
+- `source_of_truth`: whenever the named source has a non-null, non-empty value for
+  `field`, the target's provenance.source must equal it.
 
-## 6. Expression language subset (Okta-EL-shaped, ours)
+## 6. Expression language subset
 
-Grammar (all of it — anything else is `INVALID_AST`):
+Grammar (anything else → `INVALID_AST`):
 ```
 expr    := ternary
-ternary := or ("?" expr ":" expr)?
-or      := eq (("==" | "!=") eq)*      // boolean context only inside ternary cond
-eq      := concat
+ternary := eqchain ("?" expr ":" expr)?
+eqchain := concat (("==" | "!=") concat)?
 concat  := term ("+" term)*
 term    := STRING | NULL | ident | call
-ident   := ("user" | "appuser") "." NAME
+ident   := "user" "." NAME
 call    := ("String.toUpperCase" | "String.toLowerCase") "(" expr ")"
 ```
-Null/empty semantics (defect classes live here — get them exactly right):
-- missing attribute → `null`; `""` is empty-but-present, NOT null.
-- `null + "x"` → `null` (poisoning concat), `"" + "x"` → `"x"`.
-- `null == null` → true; `"" == null` → false.
-- `user.X` resolves through `priority`: first source (then okta base profile) with the
-  attribute **present** wins — present-but-empty ("") STILL WINS over a later source
-  (this is defect class D5's trap).
-Provenance: every evaluation returns `{value, prov: {source, inputs:[{ref, source}], branch}}`.
+Semantics:
+- `user.X` resolves through `[...priority, "okta"]`; first source with X **present
+  (`in`)** wins; present-but-`""` wins over later sources (DC4's trap).
+- missing everywhere → `null`. `""` is present-and-empty, not null.
+- `null` poisons concat (`null + "x" → null`); `"" + "x" → "x"`.
+- `"" == null` → false; `null == null` → true. Equality on strings is exact-case.
+- Provenance per evaluation:
+  `{value, prov: {source, branch, candidates: [{source, present, value}], inputs: [{ref, source}]}}`
+  — `candidates` lists EVERY source consulted in priority order (losing sources are
+  therefore named; EVAL layer-1 asserts P4's losing `hris` candidate appears).
+  Identity-field candidate values are redacted at the tool boundary like all values.
 
-## 7. Tools (5, top-level, no more)
+## 7. Tools — complete contracts (5, top-level, no more)
 
-| name | mode | mutates draft? | errors |
-|---|---|---|---|
-| `read_mapping_session` | read | no | NO_DRAFT |
-| `stage_mapping_invariants` | stage | pins only | BAD_RULE, REVISION_MISMATCH |
-| `find_mapping_counterexample` | preview | evidence only | REVISION_MISMATCH, NO_COUNTEREXAMPLE, EVALUATOR_FAILED |
-| `preview_mapping_patch` | preview | evidence only | REVISION_MISMATCH, INVALID_AST, UNKNOWN_PERSONA |
-| `prepare_mapping_review` | prepare | packets only | REVISION_MISMATCH, STALE_EVIDENCE, PII_GUARD |
+Common rules: input `expectedRevision` required on every tool except
+`read_mapping_session`; on mismatch → error `REVISION_MISMATCH` with
+`{currentRevision}`. Every success payload includes `revision`. One text content
+item; `JSON.stringify(payload).length <= 1500` (over-budget → violations trimmed to
+ids + `truncated:true`; still over → `EVALUATOR_FAILED`). UI renders BEFORE return.
+`annotations: {readOnlyHint}` as listed — hints, not security. No apply/save/push
+tool exists.
 
-Rules binding all five:
-- Every tool takes `expectedRevision` except `read_mapping_session`; mismatch → `REVISION_MISMATCH` with `{currentRevision}` in the payload so the agent recovers in one step.
-- UI updates synchronously BEFORE the tool returns (dispatch → render → return).
-- Result = single text content item, `JSON.stringify(payload).length <= 1500` (tested).
-- `annotations: {readOnlyHint: <bool>}` per table. Annotations are hints, not security.
-- NOT REGISTERED, EVER: apply/save/push/mutate-backend anything. Apply is a plain
-  disabled-until-green button in the UI and stays disabled in the whole demo.
+**read_mapping_session** (readOnly true)
+- in: `{}` — out: `{revision, priority, fields: [{field, expr, defectFree: null}], pinIds: [string], personaCount}`
+  (`defectFree` is always null — the page never grades itself; the agent judges.)
 
-## 8. Redaction (PII_GUARD)
+**stage_mapping_invariants** (readOnly false — pins only)
+- in: `{expectedRevision, invariants: [{id?, type, ...perTypeFields}]}` (≤8)
+- REPLACES the full pin set atomically (append semantics rejected — resubmit the
+  whole set; simplest deterministic rule). Unknown type / missing per-type field →
+  `BAD_RULE {reason}`. out: `{revision, pinIds}` (revision has bumped by 1).
 
-Persona identity fields (`firstName`, `lastName`, `email` values) carry canary values
-(`CANARY_FN_P3`, `CANARY_EM_P7@example.invalid`, ...). The redaction layer maps every
-outgoing payload; any leak of a `CANARY_` substring in ANY tool result at ANY point =
-test failure + eval kill-line K2. Tool payloads may carry: personaId (`P1..P8`),
-category labels, field NAMES, provenance sources, boolean/status values, and diffs for
-NON-identity fields only. Identity-field diffs render as `"<redacted:changed>"`.
+**find_mapping_counterexample** (readOnly true — records evidence, no draft change)
+- in: `{expectedRevision, invariantIds: [string], maxPersonas?: number<=8}`
+- Evaluates ALL personas × ALL expressions, checks the named pins, exhaustive
+  minimal witness (2^8 subsets max). out: `{revision, personaIds, violations:
+  [{invariantId, personaId, field, detail}], coverage: {invId: bool}, evidenceIds}`.
+  No violations → error `NO_COUNTEREXAMPLE {checked: n}` (not an empty success —
+  the agent must distinguish). Unknown pin id → `BAD_RULE`. Engine throw → `EVALUATOR_FAILED`.
 
-## 9. UI (one page, no framework)
+**preview_mapping_patch** (readOnly true — records evidence, DOES NOT edit the draft)
+- in: `{expectedRevision, field, expr, personaIds: [string]}`
+- Parses `expr` (→ `INVALID_AST {position}`), evaluates ONLY the named personas
+  under draft-with-patch-overlaid, re-checks all pins on the patched field.
+  out: `{revision, field, diffs: [{personaId, before, after}], remainingViolations,
+  evidenceId}` (identity-field diffs are `"<redacted:changed>"`). Unknown persona →
+  `UNKNOWN_PERSONA`. The human applies the patch by editing the UI themselves —
+  the tool never writes the draft (that keeps the human the author of every edit).
 
-`src/page/index.html` + `app.js` + `register.js` (ES modules, no build step):
-- mapping grid: field | expression input | pushMode | per-field provenance chip
-- direction toggle + priority select
-- invariant chips (pin/unpin) — human-editable
-- counterexample matrix: persona × invariant, violating cells red, click → provenance rail
-- provenance rail: source chain per field, branch taken
-- packet panel: coverage %, blockers, stale watermark over any stale evidence
-- Apply button: plain UI, disabled unless latest packet green — never enabled in demo
-- revision badge always visible (r17 → r18 moment is the demo's money shot)
+**prepare_mapping_review** (readOnly true — records a packet)
+- in: `{expectedRevision, evidenceIds: [string]}`
+- Fails `STALE_EVIDENCE {staleIds}` if ANY referenced evidence is stale.
+  Packet-green rule: every current pin id appears in the union of the referenced
+  evidences' fingerprints AND no violation remains un-resolved in the newest
+  evidence per pin → `blockers: []`; otherwise blockers list
+  `{pin, reason: "uncovered"|"violating"}`. `PII_GUARD` if the canary sweep of the
+  assembled packet trips. out: `{revision, packetId, coverage, blockers}`.
+  Apply (plain UI) enables ONLY on `blockers: []` — and stays unused in the demo.
 
-## 10. Demo scripts (from the reviewed idea card, unchanged)
+## 8. Store semantics (fingerprints, not vibes)
 
-30s: 0–6s single-persona all-green → 7–14s two human invariants typed, agent finds 2
-counterexamples → 15–22s human allows one legal null + edits one expression (r17→r18)
-→ 23–27s old review packet REJECTED stale → 28–30s recheck green, Apply still human.
+- Mutating actions — `EDIT_EXPRESSION{field, expr}`, `SET_PRIORITY{priority}`,
+  `PIN_INVARIANTS{invariants}` (full replace), `UNPIN{id}` — bump `revision` by 1.
+  `recordEvidence`/`recordPacket` do NOT bump (derived data).
+- Evidence fingerprint (recorded at creation):
+  `{fields: [every field evaluated], invariants: [every pin checked], personas: [every persona evaluated]}`
+  — for `find_…` that is ALL fields × named pins × all personas; for `preview_…`
+  it is `[field]` × all pins × named personas.
+- Invalidation: `EDIT_EXPRESSION(f)` stales evidence with `f ∈ fingerprint.fields`;
+  `SET_PRIORITY` stales ALL evidence (priority feeds every resolution);
+  `PIN_INVARIANTS`/`UNPIN` stale evidence whose `fingerprint.invariants` changed
+  membership — AND packet-green re-checks pin coverage regardless, so a new pin
+  makes old packets incomplete-by-coverage even where evidence stays fresh.
+- Consequence stated honestly: a `find_…` evidence stales on ANY expression edit
+  (its fingerprint spans all fields). "Fingerprint-exact" earns its name on
+  `preview_…` evidence and on the invariant axis. SPEC §2's wording matches this.
 
-3min: pain 20s → dirty state 25s → five-tool loop 55s → arms A/B/C same-fixture 40s →
-stale/PII guards 25s → results + kill lines 15s.
+## 9. Redaction (PII_GUARD)
 
-## 11. Public-material rules
+Identity fields: `firstName`, `lastName`, `email` in EVERY source profile
+(okta/hris/ad) carry canaries `CANARY_FN_<id>` / `CANARY_LN_<id>` /
+`CANARY_EM_<id>@example.invalid`. The redaction walk covers payload keys AND
+values AND nested candidates/diffs. Any `CANARY_` substring in any tool result at
+any point = layer-1 failure + kill K2. Allowed out: persona ids, category labels,
+field names, provenance source names, booleans, and non-identity value diffs.
 
-- Never cite WindTunnel or arXiv 2508.09171 anywhere public.
-- No "world-first/unique" claims; nearest-neighbor concessions stated up front (§2).
-- Judging map: Leverage = dirty-state closed loop; Execution = EVAL.md layers 1–3 all
-  green; Impact = Okta-admin persona + 4,000-employee push story; Creativity = minimal
-  witness set + provenance + closure invalidation (NOT draft-preview).
+## 10. UI + deploy layout
+
+Page lives at REPO ROOT (`index.html`, `style.css`, `app.js` importing
+`./src/...`, fetching `./data/personas.json`) so one static publish of `.` serves
+everything (fixes the review's 404 finding; `render.yaml` publishes `.`).
+Test hook: `window.__imw = {store, render, runTool}` — the harness's "human edit"
+dispatches through it; documented as a test surface, not an API.
+Components: mapping grid (field / editable expr / provenance chip), priority
+select, invariant chips, counterexample matrix (persona × invariant), provenance
+rail (candidates chain, losing sources visible), packet panel with blockers +
+stale watermark, revision badge, Apply disabled-unless-green and never used.
+
+## 11. Demo beats (single direction, updated to golden walk)
+
+30s: 0–6s P1 all green → 7–14s human pins 3 invariants; agent returns witness
+{P2,P3,P4} with provenance → 15–22s human fixes `managerId` expr in the UI
+(r17→r18) → 23–27s stale packet REJECTED (`STALE_EVIDENCE`) → 28–30s re-find +
+packet green; Apply untouched. 3min: pain 20s → dirty draft tour 25s → five-tool
+loop 55s → ablation + protocol-E2E receipts 40s → stale/PII guards 25s → limits
+(concessions #1/#2, designed-not-run arms) 15s.
+
+## 12. Public-material rules
+
+No WindTunnel, no arXiv 2508.09171, no uniqueness claims, concessions #1/#2 stated
+before any judge asks. Judging map: Leverage = session-state loop above; Execution
+= EVAL layers all green + error recovery on camera; Impact = Okta-admin 4,000-user
+push story; Creativity = witness search + provenance + fencing as a page-authored
+contract.

@@ -1,59 +1,68 @@
-# IdentityMap Witness Implementation Plan
+# IdentityMap Witness Implementation Plan (r2, post-review)
 
-> **For agentic workers:** this plan is executed by the Ralph loop described in
-> `RALPH.md` (user-prescribed executor; supersedes the subagent-driven default).
-> One task per iteration. Steps use checkbox (`- [ ]`) syntax for tracking —
-> check them off IN THIS FILE as you complete them, and commit the checkbox edit
-> together with the task's code.
+> **For agentic workers:** executed by the Ralph loop in `RALPH.md` (user-prescribed
+> executor). One step per iteration where steps are heavy; a whole task per iteration
+> where light. Every `- [ ]` lives on its own line — check it off in this file and
+> commit the checkbox edit together with the work it records. A failing-test step is
+> NEVER committed alone: test + implementation land in one commit at the task's
+> commit step.
 
-**Goal:** Ship the WebMCP demo defined in `SPEC.md` — dirty-mapping workbench +
-invariant-driven minimal counterexample search — with EVAL.md layers 1–3 green,
-3-arm benchmark report, deployed remote origin, before 2026-09-03 13:00 PT.
+r2 supersedes r1 after the gpt-5.6-sol review (`reviews/codex-sol-2026-08-29.md`):
+vertical slice first, direction cut, golden state defective-by-design, isomorphic
+tool module, root deploy layout, exhaustive witness search, fingerprint
+invalidation, external verifier + HALT protocol.
 
-**Architecture:** Zero-dependency Node 20 ES modules. A deterministic engine
-(`src/engine/`) shared verbatim by the page, the tests, and the API-baseline arm.
-A single reducer (`src/store/`) owns all page state + revision fencing + evidence
-closure. Five pure tool functions (`src/tools/`) wrap the engine; `src/page/`
-registers them on `document.modelContext` (top-level only) and renders before
-returning. A CDP harness (`harness/`) drives Chrome 152 by name over the hidden
-`WebMCP` domain for layers 2–3.
+**Goal:** Ship SPEC.md r2 with EVAL.md r2 layers green, scorer + labeled ablation
+reported, deployed remote origin, before 2026-09-03 13:00 PT.
 
-**Tech Stack:** Node 20+, `node --test`, vanilla ES modules, no runtime deps, no
-build step. Chrome 152 (installed) for the harness. Render static site for deploy.
+**Architecture:** Zero-dependency Node 20 ES modules. One isomorphic tool+engine
+core (`src/`) imported unchanged by tests, the page, and the ablation. Page at repo
+root for single-directory static deploy. CDP harness drives Chrome 152 by name over
+the `WebMCP` domain. External verifier `tools/verify.mjs` is the only authority for
+"done".
 
-**Spec:** `SPEC.md` (mechanism, constraints C1–C10, tools, redaction).
-**Eval:** `EVAL.md` (test layers, arms, thresholds, kill lines K1–K5).
+**Tech Stack:** Node 20+, `node --test`, vanilla ESM, no build, no runtime deps.
+Chrome 152 local. Render static site (publish `.`).
+
+**Spec:** `SPEC.md` r2 (constraints C1–C10, golden state §4, tool contracts §7,
+store semantics §8). **Eval:** `EVAL.md` r2 (layers, scorer, ablation, K-gates).
 
 ## Global Constraints
 
-- Deadline 2026-09-03 13:00 PT. Schedule gates: K4 = layers 1–2 green by
-  2026-08-31 18:00 PT; K5 = ChatGPT-browser demo on remote origin by 2026-09-01 21:00 PT.
-- `document.modelContext` only; the string `navigator.modelContext` must not appear
-  in `src/**` or `harness/**` (SPEC C1). Registration in the top-level document (C8).
-- No tool waits on a human — two-phase handshake only (C4, 22.3s measured death).
-- Tool payloads: one text content item, `JSON.stringify(payload).length <= 1500`.
-- No apply/save/push tool is ever registered (SPEC §7).
-- No CANARY_ substring may leave any tool (SPEC §8, kill K2).
-- Never read or write anything under `/Users/calebwei/mcp/outpocket` (frozen sprint).
-  Port patterns by retyping, never by import.
-- Numbers in reports/messages come from command output only (D-38 discipline).
+- Deadline 2026-09-03 13:00 PT. Gates: K0 2026-08-30 14:00 (T1+T2 green);
+  K4 08-31 18:00 (`npm test` + `--smoke` green); K5 09-01 21:00 (human ChatGPT
+  evidence committed). Loop checks `date` against these EVERY iteration (RALPH.md).
+- `document.modelContext` only; `navigator.modelContext` banned in `src/**`,
+  `harness/**`, root `app.js` (tested). Top-level registration only.
+- No tool waits on a human (C4). Payload ≤1500 chars. No apply/save/push tool.
+- No `CANARY_` leaves any tool (keys, values, candidates, diffs).
+- Never touch `/Users/calebwei/mcp/outpocket`. Patterns retyped, never imported.
+- Numbers from command output only (D-38). Loop never edits `data/oracle.json`
+  `audited` field or `data/golden-walk.md` after T1 (human-only thereafter).
 - Public materials: no WindTunnel, no arXiv 2508.09171, no uniqueness claims.
-- Commit after every green task step-5; message prefix `T<n>:`.
+- Commit prefix `T<n>:`; every commit leaves `npm test` green (except inside a
+  task before its commit step — never leave a red tree AT a commit).
 
 ---
 
-### Task 1: Scaffold + fixture personas + oracle skeleton
+### Task 1: Golden contract freeze (fixture + hand-walk + oracle + snapshot)
 
 **Files:**
 - Create: `package.json`, `.gitignore`, `data/personas.json`, `data/defects.md`,
-  `data/oracle.json`, `tests/fixture.test.mjs`
+  `data/golden-walk.md`, `data/oracle.json`, `data/persisted-snapshot.json`,
+  `tests/fixture.test.mjs`
 
-**Interfaces:**
-- Produces: persona shape `{id, category, region, profiles: {okta, hris, ad, app}}`
-  consumed by every later task. Identity values are canaries: `CANARY_FN_<id>`,
-  `CANARY_LN_<id>`, `CANARY_EM_<id>@example.invalid`.
+**Interfaces (frozen here, consumed by every later task):**
+- Persona: `{id, category, region, profiles: {okta: {...}, hris: {...}, ad: {...}}}`
+  — identity fields `firstName/lastName/email` in EVERY profile carry
+  `CANARY_FN_<id>` / `CANARY_LN_<id>` / `CANARY_EM_<id>@example.invalid`.
+- Golden state: SPEC §4 verbatim (priority `["ad","hris"]`, the four DC expressions).
+- Oracle: `{audited: false, minimalWitness: {size: 3, sets: [["P2","P3","P4"],["P2","P3","P5"]]}, expectedViolations: [{invariantId, personaId, field, defectClass}], expectedValues: {personaId: {field: {value, provSource}}}}` — filled for all 8 personas × 5 fields by HAND-WALKING SPEC §6 semantics in `data/golden-walk.md` first, then transcribing. The engine does not exist yet; that is the point.
+- Snapshot: pre-session saved state — corrected `group` expr
+  (`String.toLowerCase(user.userType) == "contractor" ? …`), plain `user.managerId`,
+  priority `["hris","ad"]`, no pins. This is what a saved-state reader sees.
 
-- [ ] **Step 1: package.json + gitignore**
+- [ ] **Step 1: package.json + .gitignore**
 
 ```json
 {
@@ -64,436 +73,341 @@ build step. Chrome 152 (installed) for the harness. Render static site for deplo
   "engines": { "node": ">=20" }
 }
 ```
-
 `.gitignore`: `node_modules/`, `eval/out/tmp-*`, `.claude/.ralph-loop.local.md`, `chrome-profile-*/`
 
-- [ ] **Step 2: Write failing fixture test**
+- [ ] **Step 2: Write the failing fixture test**
 
 ```js
 // tests/fixture.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+const load = async (f) => JSON.parse(await readFile(new URL(`../data/${f}`, import.meta.url)));
 
-test("8 personas, all identity values are canaries, defect roles present", async () => {
-  const ps = JSON.parse(await readFile(new URL("../data/personas.json", import.meta.url)));
+test("personas: 8, canaries in EVERY source profile, DC carriers present", async () => {
+  const ps = await load("personas.json");
   assert.equal(ps.length, 8);
-  for (const p of ps) {
-    assert.match(p.profiles.okta.firstName, /^CANARY_FN_/);
-    assert.match(p.profiles.okta.email, /^CANARY_EM_.*@example\.invalid$/);
+  for (const p of ps) for (const src of ["okta", "hris", "ad"]) {
+    const prof = p.profiles[src] ?? {};
+    for (const [k, re] of [["firstName", /^CANARY_FN_/], ["lastName", /^CANARY_LN_/], ["email", /^CANARY_EM_.+@example\.invalid$/]])
+      if (k in prof) assert.match(prof[k], re, `${p.id}.${src}.${k}`);
+    assert.ok(("firstName" in prof) || src !== "okta", "okta profile carries identity");
   }
-  assert.ok(ps.some(p => p.category === "contractor"));                    // D2/inv-forbid
-  assert.ok(ps.some(p => p.region === "EU" && !("managerId" in p.profiles.hris) && !("managerId" in p.profiles.okta))); // D3
-  assert.ok(ps.some(p => p.profiles.hris.department !== p.profiles.ad.department)); // D4
-  assert.ok(ps.some(p => p.profiles.ad.department === ""));                // D5 empty-not-null
+  assert.ok(ps.some(p => p.id === "P2" && p.profiles.hris.userType === "Contractor")); // DC1 carrier
+  assert.ok(ps.some(p => p.id === "P3" && p.region === "EU"
+    && !["okta","hris","ad"].some(s => "managerId" in (p.profiles[s] ?? {}))));        // DC2 carrier
+  assert.ok(ps.some(p => p.id === "P4" && p.profiles.ad.department === "Sales"
+    && p.profiles.hris.department === "Engineering"));                                 // DC3 carrier
+  assert.ok(ps.some(p => p.id === "P5" && p.profiles.ad.department === ""
+    && p.profiles.hris.department === "Finance"));                                     // DC4 carrier
+});
+test("oracle: unaudited, size-3 witness, violations reference the 4 classes", async () => {
+  const o = await load("oracle.json");
+  assert.equal(o.audited, false);
+  assert.equal(o.minimalWitness.size, 3);
+  assert.deepEqual([...new Set(o.expectedViolations.map(v => v.defectClass))].sort(),
+    ["DC1", "DC2", "DC3", "DC4"]);
+});
+test("snapshot: corrected exprs, hris-first, no pins", async () => {
+  const s = await load("persisted-snapshot.json");
+  assert.deepEqual(s.priority, ["hris", "ad"]);
+  assert.ok(s.expressions.group.includes("String.toLowerCase"));
+  assert.equal(s.expressions.managerId, "user.managerId");
+  assert.deepEqual(s.pins, []);
 });
 ```
 
-- [ ] **Step 3: Run to verify it fails** — `npm test` → FAIL (ENOENT personas.json)
+- [ ] **Step 3: `npm test` → verify FAIL (ENOENT)**
+- [ ] **Step 4: Author personas (P1 clean baseline, P2 "Contractor", P3 EU managerless, P4 dept conflict, P5 ad-empty dept, P6 employee mixed-case group source, P7 lowercase contractor mapped correctly, P8 spare clean), then hand-walk SPEC §6 over SPEC §4 in `data/golden-walk.md` (a table: persona × field → value, prov source, violated pin, defect class — every row derived on paper), transcribe into oracle.json + defects.md, author persisted-snapshot.json**
+- [ ] **Step 5: `npm test` green → commit** `T1: golden contract — fixture, hand-walk, oracle, snapshot`
 
-- [ ] **Step 4: Author the fixture**
+---
 
-8 personas: P1 baseline employee; P2 contractor (userType "contractor"); P3 EU
-managerless; P4 HRIS/AD department conflict ("Engineering" vs "Sales"); P5 AD
-empty-string department + HRIS "Finance" (D5 trap: "" wins by presence); P6
-employee with mixed-case group source "Employees" (D2); P7 second contractor
-(so the oracle minimum witness stays 2 — P2 or P7 both cover inv-forbid); P8
-baseline app-side persona for direction tests. `data/defects.md` maps each
-defect class D1–D5 to the personas + expressions that expose it. `data/oracle.json`:
+### Task 2: Vertical slice — page at root, 5 stub tools registered, CDP smoke
 
-```json
-{
-  "audited": false,
-  "minimalWitness": { "invariants": ["inv-forbid","inv-null","inv-sot"], "size": 2, "sets": [["P2","P3"],["P7","P3"]] },
-  "expected": { "P3": { "user_to_app": { "managerId": { "value": null, "provSource": null } } } }
+Retires on day one: C3/C7/C8/C10 launch+registration risk and the deploy-layout
+404 risk (review P1). Stubs return SPEC-shaped payloads from the golden state
+WITHOUT the engine (hardcoded from `data/golden-walk.md`).
+
+**Files:**
+- Create: `index.html`, `style.css`, `app.js`, `src/tools/defs.mjs`,
+  `harness/serve.mjs`, `harness/chrome.mjs`, `harness/cdp.mjs`, `harness/relay.mjs`
+- Test: `tests/toplevel.test.mjs`
+
+**Interfaces:**
+- `src/tools/defs.mjs` (ISOMORPHIC — imported by app.js, tests, ablation; zero
+  node-only imports): exports `TOOLS: [{name, description, inputSchema, annotations, handler}]`
+  and `runTool(store, personas, name, args) -> {ok, payload}|{ok:false, error}`;
+  in T2 handlers are stubs keyed `STUB:` + shape-correct.
+- `index.html`: top-level `<script type="module">` imports `./app.js`; app.js
+  builds store stub, calls `registerAll`, exposes `window.__imw = {store, render, runTool}`.
+- `registerAll` (inside app.js, per SPEC C10, no `{signal}`):
+
+```js
+for (const t of TOOLS) {
+  document.modelContext.registerTool({
+    name: t.name, description: t.description, inputSchema: t.inputSchema,
+    annotations: t.annotations,
+    execute: async (args) => {
+      const r = runTool(store, personas, t.name, args ?? {});
+      render();
+      return { content: [{ type: "text", text: JSON.stringify(r.ok ? r.payload : { error: r.error }) }] };
+    },
+  });
 }
 ```
-(fill `expected` for all 8 × both directions in this step — ~80 rows, generated by
-hand-walking SPEC §6 semantics, NOT by running the engine we are about to write).
 
-- [ ] **Step 5: `npm test` green → commit** `T1: fixture personas, defect matrix, oracle skeleton`
+- `harness/serve.mjs`: node:http static server, root = repo root, `/` → index.html.
+- `harness/chrome.mjs`: `launchChrome({port, userDataDir})` with
+  `--enable-features=WebMCP --headless=new --remote-debugging-port=<port> --user-data-dir=<fresh>`;
+  kills + rm -rf profile on close.
+- `harness/cdp.mjs`: ~80-line WebSocket JSON-RPC client (node:http upgrade),
+  `send(method, params, sessionId)`, `on(fn)`.
+- `harness/relay.mjs --smoke` asserts: completed `WebMCP.invokeTool`→`toolResponded`
+  round trip on `read_mapping_session` (presence proof per C7);
+  `(await document.modelContext.getTools()).length === 5` via Runtime.evaluate (C6);
+  unknown name → -32602 at send; matrix DOM node exists; **cold sessions ×3**, fresh
+  profile each, all pass.
+
+- [ ] **Step 1: Write `tests/toplevel.test.mjs`** — static import-graph walk (blank
+  strings/comments, regex imports): `registerTool` reachable only from index.html's
+  entry module; `navigator.modelContext` absent from `src/**`, `harness/**`, `app.js`.
+- [ ] **Step 2: `npm test` → new test FAILS (files missing)**
+- [ ] **Step 3: Implement the slice (stub handlers; minimal grid + matrix DOM)**
+- [ ] **Step 4: `npm test` green AND `node harness/relay.mjs --smoke` exit 0**
+- [ ] **Step 5: Commit** `T2: vertical slice — root page, 5 stub tools, CDP smoke x3`
 
 ---
 
-### Task 2: Expression lexer + parser
+### Task 3: Parser
 
-**Files:**
-- Create: `src/engine/parser.mjs`, `tests/parser.test.mjs`
+**Files:** Create `src/engine/parser.mjs`, `tests/parser.test.mjs`
 
-**Interfaces:**
-- Produces: `parse(src: string) -> ast`. Node kinds: `{k:"str",v}`, `{k:"null"}`,
-  `{k:"ident", ns:"user"|"appuser", name}`, `{k:"call", fn:"upper"|"lower", arg}`,
-  `{k:"concat", parts:[...]}`, `{k:"eq"|"neq", l, r}`, `{k:"ternary", cond, then, else}`.
-  Throws `Object.assign(new Error(msg), {code:"INVALID_AST"})` on anything else.
+**Interfaces:** `parse(src) -> ast`; nodes `{k:"str",v}`, `{k:"null"}`,
+`{k:"ident", name}` (namespace `user` only — direction is cut), `{k:"call",
+fn:"upper"|"lower", arg}`, `{k:"concat", parts}`, `{k:"eq"|"neq", l, r}`,
+`{k:"ternary", cond, then, else}`. Errors: `{code:"INVALID_AST", position}`.
 
-- [ ] **Step 1: Failing tests**
-
-```js
-// tests/parser.test.mjs
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { parse } from "../src/engine/parser.mjs";
-
-test("concat + ident", () => {
-  assert.deepEqual(parse('user.firstName + " " + user.lastName'), {
-    k: "concat", parts: [
-      { k: "ident", ns: "user", name: "firstName" },
-      { k: "str", v: " " },
-      { k: "ident", ns: "user", name: "lastName" }]});
-});
-test("ternary with equality", () => {
-  const a = parse('user.userType == "employee" ? "employees" : "contractors"');
-  assert.equal(a.k, "ternary"); assert.equal(a.cond.k, "eq");
-});
-test("calls", () => {
-  assert.deepEqual(parse('String.toUpperCase(user.dept)'),
-    { k: "call", fn: "upper", arg: { k: "ident", ns: "user", name: "dept" } });
-});
-test("rejects out-of-grammar", () => {
-  for (const bad of ['user[0]', 'fetch("x")', 'a && b', 'user.', '1 + 2', 'appuser + 1']) {
-    assert.throws(() => parse(bad), (e) => e.code === "INVALID_AST");
-  }
-});
-```
-
-- [ ] **Step 2: Run → FAIL (module not found)**
-
-- [ ] **Step 3: Implement** — hand-rolled tokenizer (strings, `null`, names,
-`.`, `+`, `?`, `:`, `==`, `!=`, `(`, `)`) + recursive-descent per SPEC §6 grammar,
-~90 lines. Whitelist namespaces (`user`, `appuser`) and the two `String.*` calls;
-anything unexpected → INVALID_AST with position.
-
+- [ ] **Step 1: Failing tests** — the four SPEC §4 draft expressions parse to
+  exact ASTs (write all four as deepEqual cases); rejects
+  `['appuser.x', 'user[0]', 'fetch("x")', 'a && b', 'user.', '1 + 2', 'x ? y']`
+  each with INVALID_AST + numeric `position`.
+- [ ] **Step 2: run → FAIL**
+- [ ] **Step 3: Implement (tokenizer + recursive descent, ≈90 lines)**
 - [ ] **Step 4: `npm test` green**
-
-- [ ] **Step 5: Commit** `T2: EL subset parser`
-
----
-
-### Task 3: Evaluator + source priority + provenance
-
-**Files:**
-- Create: `src/engine/eval.mjs`, `tests/eval.test.mjs`, `tests/prov.test.mjs`
-
-**Interfaces:**
-- Consumes: `parse` (T2), persona shape (T1).
-- Produces: `evaluate(ast, persona, {direction, priority}) -> {value, prov}` where
-  `prov = {source, inputs: [{ref, source}], branch: "then"|"else"|null}`. Resolution:
-  `user.X` → first of `[...priority, "okta"]` whose profile has property X **present
-  (in operator)** — present-but-`""` wins (D5). `appuser.X` → `profiles.app`.
-  Missing everywhere → `{value: null, prov: {source: null, ...}}`.
-  `null` poisons concat; `"" == null` is false. Throws `{code:"EVALUATOR_FAILED"}`
-  only on internal invariant breaks, never on data.
-
-- [ ] **Step 1: Failing tests (the semantics table IS the test)**
-
-```js
-// tests/eval.test.mjs (excerpt — full table covers 14 cases)
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { parse } from "../src/engine/parser.mjs";
-import { evaluate } from "../src/engine/eval.mjs";
-const opts = { direction: "user_to_app", priority: ["hris", "ad"] };
-const P5 = { id: "P5", category: "employee", profiles: {
-  okta: { department: "Legal" }, hris: { department: "Finance" }, ad: { department: "" }, app: {} } };
-
-test("priority: earlier source wins", () => {
-  const r = evaluate(parse("user.department"), P5, opts);
-  assert.equal(r.value, "Finance"); assert.equal(r.prov.source, "hris");
-});
-test("D5: present-but-empty wins over later source", () => {
-  const r = evaluate(parse("user.department"), P5, { ...opts, priority: ["ad", "hris"] });
-  assert.equal(r.value, "");           // NOT "Finance", NOT null
-  assert.equal(r.prov.source, "ad");
-});
-test("null poisons concat; empty does not", () => {
-  const P = { id: "x", profiles: { okta: {}, hris: {}, ad: {}, app: {} } };
-  assert.equal(evaluate(parse('user.managerId + "!"'), P, opts).value, null);
-  const Q = { id: "y", profiles: { okta: { a: "" }, hris: {}, ad: {}, app: {} } };
-  assert.equal(evaluate(parse('user.a + "!"'), Q, opts).value, "!");
-});
-test("ternary records branch; eq: empty != null", () => {
-  const P = { id: "z", profiles: { okta: { t: "" }, hris: {}, ad: {}, app: {} } };
-  const r = evaluate(parse('user.t == null ? "N" : "S"'), P, opts);
-  assert.equal(r.value, "S"); assert.equal(r.prov.branch, "else");
-});
-```
-
-- [ ] **Step 2: Run → FAIL** — [x] **Step 3: Implement (~80 lines, walk the AST,
-thread a `prov` accumulator; concat prov.source = "expr", inputs = union)** —
-- [ ] **Step 4: green** — [x] **Step 5: Commit** `T3: evaluator + priority + provenance`
+- [ ] **Step 5: Commit** `T3: EL subset parser`
 
 ---
 
-### Task 4: Invariant checker
+### Task 4: Evaluator + candidates provenance + golden cross-check
 
-**Files:**
-- Create: `src/engine/invariants.mjs`, `tests/invariants.test.mjs`
+**Files:** Create `src/engine/eval.mjs`, `tests/eval.test.mjs`, `tests/golden.test.mjs`
 
-**Interfaces:**
-- Consumes: evaluated outputs `outputs[personaId] = {fields: {name: {value, prov}}}`.
-- Produces: `checkInvariants(pins, personas, outputs) -> violations:
-  [{invariantId, personaId, field, detail}]` implementing SPEC §5 semantics exactly.
+**Interfaces:** `evaluate(ast, persona, {priority}) -> {value, prov}`;
+`prov = {source, branch, candidates: [{source, present, value}], inputs: [{ref, source}]}`.
+Resolution/null/empty semantics per SPEC §6 exactly.
 
-- [ ] **Step 1: Failing tests** — contractor mapped into "employees" fires
-inv-forbid (case-INSENSITIVE compare is D2's fix: `"Employees"` must ALSO fire);
-P3 managerId `""` (not null) fires inv-null; department prov.source `"ad"` while
-hris has non-null value fires inv-sot; all-clean fixture returns `[]`.
-
-- [ ] **Step 2 FAIL → Step 3 implement (~50 lines) → Step 4 green → Step 5 commit** `T4: invariant checker`
-
----
-
-### Task 5: Witness search (minimal hitting set)
-
-**Files:**
-- Create: `src/engine/witness.mjs`, `tests/witness.test.mjs`
-
-**Interfaces:**
-- Consumes: T3 `evaluate`, T4 `checkInvariants`.
-- Produces: `findWitness(state, personas) -> {personaIds, violations, coverage:
-  {invariantId: boolean}}` — evaluates every persona under `state`
-  (expressions/direction/priority), collects violations, then greedy set-cover picks
-  the minimal persona set covering every VIOLATED invariant. Ties broken by persona
-  id order (determinism). Returns `{personaIds: []}` when nothing violates.
-
-- [ ] **Step 1: Failing tests** — on the T1 fixture with SPEC §4's default
-expressions + all 3 pins: coverage true for all 3, `personaIds.length === 2`, and
-the set equals one of `data/oracle.json.minimalWitness.sets`; single-invariant case
-returns exactly 1 persona; no-violation case returns empty + NO_COUNTEREXAMPLE is
-NOT thrown here (that mapping to tool errors happens in T8).
-
-- [ ] **Step 2 FAIL → Step 3 implement (~60 lines) → Step 4 green → Step 5 commit** `T5: minimal witness search`
+- [ ] **Step 1: Failing tests** — semantics table (priority order; DC4
+  present-but-empty wins; null poisons concat, "" does not; `"" == null` false;
+  branch capture); candidates chain includes losing `hris` for P4-shaped input.
+  `tests/golden.test.mjs`: evaluate SPEC §4 golden expressions over ALL personas
+  and deepEqual against `oracle.expectedValues` (machine now reproduces the
+  hand-walk — review P1 #2's guard).
+- [ ] **Step 2: FAIL** → **Step 3: implement (≈90 lines)** → **Step 4: green**
+- [ ] **Step 5: Commit** `T4: evaluator + candidates provenance + golden cross-check`
 
 ---
 
-### Task 6: Store — revision fencing + evidence closure
+### Task 5: Invariant checker
 
-**Files:**
-- Create: `src/store/reducer.mjs`, `tests/reducer.test.mjs`
+**Files:** Create `src/engine/invariants.mjs`, `tests/invariants.test.mjs`
 
-**Interfaces:**
-- Produces:
-  `createStore(initialState?) -> {getState, dispatch(action), recordEvidence(kind, deps, payload) -> id, listEvidence()}`.
-  Actions: `{type:"EDIT_EXPRESSION", field, expr}`, `{type:"SET_DIRECTION", direction}`,
-  `{type:"SET_PRIORITY", priority}`, `{type:"PIN_INVARIANTS", invariants}`,
-  `{type:"UNPIN", id}`. Every dispatch: `revision += 1`, then stale-marks each
-  evidence whose `deps` intersect the touched paths:
-  EDIT_EXPRESSION → `deps.fields` containing field; SET_DIRECTION/SET_PRIORITY →
-  ALL evidence; PIN/UNPIN → `deps.invariants` containing the id.
-  Evidence: `{id, kind, revision, deps:{fields:[], invariants:[], personas:[]}, stale:false, payload}`.
+**Interfaces:** `checkInvariants(pins, personas, outputs) -> [{invariantId,
+personaId, field, detail}]`; `outputs[personaId] = {fields: {name: {value, prov}}}`.
+SPEC §5 semantics; checker case-insensitive on category/group (DC1 asymmetry).
+
+- [ ] **Step 1: Failing tests** — golden outputs (from T4) produce EXACTLY
+  oracle.expectedViolations (set-equal); corrected-snapshot outputs produce zero;
+  per-type edge cases (missing group field, null category).
+- [ ] **Step 2: FAIL** → **Step 3: implement (≈50 lines)** → **Step 4: green**
+- [ ] **Step 5: Commit** `T5: invariant checker matches oracle`
+
+---
+
+### Task 6: Witness search (exhaustive, provably minimal)
+
+**Files:** Create `src/engine/witness.mjs`, `tests/witness.test.mjs`
+
+**Interfaces:** `findWitness(state, personas) -> {personaIds, violations,
+coverage}` — evaluates all personas, checks all pins, then exhaustive subset scan
+(personas ≤ 8 ⇒ ≤255 non-empty subsets) for the smallest set covering every
+violated invariant; ties → lexicographic persona order.
+
+- [ ] **Step 1: Failing tests** — golden: coverage all-true, `personaIds` equals
+  one of oracle.minimalWitness.sets (size 3); single-pin case → size 1; clean
+  snapshot state → `{personaIds: [], violations: []}`.
+- [ ] **Step 2: FAIL** → **Step 3: implement (≈50 lines)** → **Step 4: green**
+- [ ] **Step 5: Commit** `T6: exhaustive minimal witness`
+
+---
+
+### Task 7: Store — revision + fingerprint invalidation + packets
+
+**Files:** Create `src/store/reducer.mjs`, `tests/reducer.test.mjs`
+
+**Interfaces:** `createStore(initial?) -> {getState, dispatch, recordEvidence(kind,
+fingerprint, payload) -> id, recordPacket(evidenceIds, pinsCovered, blockers) -> id,
+listEvidence()}`. SPEC §8 verbatim: only EDIT_EXPRESSION / SET_PRIORITY /
+PIN_INVARIANTS (full replace) / UNPIN bump revision; record* never bumps;
+invalidation per fingerprint table.
 
 - [ ] **Step 1: Failing tests**
 
 ```js
-// tests/reducer.test.mjs (core case)
-test("closure invalidation is exact", () => {
-  const s = createStore();
-  const e1 = s.recordEvidence("counterexample", { fields: ["managerId"], invariants: ["inv-null"], personas: ["P3"] }, {});
-  const e2 = s.recordEvidence("counterexample", { fields: ["group"], invariants: ["inv-forbid"], personas: ["P2"] }, {});
+test("fingerprint invalidation table", () => {
+  const s = createStore(golden());
+  const find = s.recordEvidence("counterexample",
+    { fields: ["displayName","group","managerId","department","email"],
+      invariants: ["inv-forbid","inv-null","inv-sot"], personas: ALL8 }, {});
+  const prev = s.recordEvidence("patch-preview",
+    { fields: ["group"], invariants: PINS3, personas: ["P2"] }, {});
   const r0 = s.getState().revision;
   s.dispatch({ type: "EDIT_EXPRESSION", field: "managerId", expr: "user.managerId" });
   assert.equal(s.getState().revision, r0 + 1);
-  assert.equal(s.getState().evidence[e1].stale, true);
-  assert.equal(s.getState().evidence[e2].stale, false);   // untouched deps survive
+  assert.equal(s.getState().evidence[find].stale, true);   // find spans all fields
+  assert.equal(s.getState().evidence[prev].stale, false);  // preview fingerprint untouched
+  s.dispatch({ type: "SET_PRIORITY", priority: ["hris","ad"] });
+  assert.equal(s.getState().evidence[prev].stale, true);   // priority stales everything
+});
+test("recordEvidence/recordPacket do not bump revision", () => { /* r stays fixed */ });
+test("clean-to-violating edit is caught", () => {
+  // start from snapshot (clean), edit email expr into a violating one,
+  // assert prior evidence stale AND a fresh findWitness reports the new violation
 });
 ```
 
-- [ ] **Step 2 FAIL → Step 3 implement (~70 lines, plain object state, structuredClone on read) → Step 4 green → Step 5 commit** `T6: store + revision fencing + closure`
+- [ ] **Step 2: FAIL** → **Step 3: implement (≈80 lines)** → **Step 4: green**
+- [ ] **Step 5: Commit** `T7: store fingerprints + packets`
 
 ---
 
-### Task 7: Redaction layer
+### Task 8: Redaction
 
-**Files:**
-- Create: `src/tools/redact.mjs`, `tests/redact.test.mjs`
+**Files:** Create `src/tools/redact.mjs`, `tests/redact.test.mjs`
 
-**Interfaces:**
-- Produces: `redactPayload(payload) -> payload'` (deep walk: any string containing
-  `CANARY_` → `"<redacted>"`; identity field diffs → `"<redacted:changed>"`), and
-  `assertNoCanary(payload)` which throws `{code:"PII_GUARD"}` — the tool layer calls
-  BOTH: redact first, assert after (belt and suspenders).
+**Interfaces:** `redactPayload(p) -> p'` (deep walk over keys AND values AND
+arrays: `CANARY_`-bearing strings → `"<redacted>"`; identity-field diffs →
+`"<redacted:changed>"`); `assertNoCanary(p)` throws `{code:"PII_GUARD"}`. Tool
+layer calls redact THEN assert.
 
-- [ ] **Step 1: Failing tests** — nested objects/arrays scrubbed; non-identity
-values untouched; assertNoCanary throws on a crafted leak; property-style test:
-run every T8 tool over every fixture persona and grep the JSON for `CANARY_`
-(this test file is extended in T8 step 1).
-
-- [ ] **Step 2 FAIL → Step 3 implement (~35 lines) → Step 4 green → Step 5 commit** `T7: redaction + canary guard`
+- [ ] **Step 1: Failing tests** — nested candidates/diffs scrubbed; canary in a
+  KEY caught; non-identity values untouched; crafted post-redaction leak throws.
+- [ ] **Step 2: FAIL** → **Step 3: implement (≈40 lines)** → **Step 4: green**
+- [ ] **Step 5: Commit** `T8: redaction + canary guard`
 
 ---
 
-### Task 8: Tool surface (5 tools, pure)
+### Task 9: Real tools (SPEC §7 complete) + full UI
 
-**Files:**
-- Create: `src/tools/defs.mjs`, `src/tools/run.mjs`, `tests/tools.test.mjs`
+**Files:** Modify `src/tools/defs.mjs` (stubs → real), `app.js` (full render);
+Create `tests/tools.test.mjs`
 
-**Interfaces:**
-- Consumes: T2–T7 everything.
-- Produces: `TOOLS` (array of `{name, description, inputSchema, annotations, handler}`)
-  and `runTool(store, personas, name, args) -> {ok:true, payload} | {ok:false, error:{code, currentRevision?}}`.
-  `handler(store, personas, args)` per SPEC §7. Payload always includes `revision`;
-  every non-read tool checks `args.expectedRevision === state.revision` FIRST and
-  returns `REVISION_MISMATCH` + `currentRevision` on failure. `find_mapping_counterexample`
-  calls `findWitness`, records evidence with exact deps (fields referenced by the
-  violated invariants' expressions ∪ invariant ids ∪ personaIds), returns
-  `{revision, personaIds, violated, evidenceIds}`. `prepare_mapping_review` refuses
-  any stale evidence id (STALE_EVIDENCE) and records a packet on success.
-  Serialization budget enforced here: `if (JSON.stringify(p).length > 1500) → trim
-  violations to ids-only, re-check, else throw EVALUATOR_FAILED` (tested at the cap).
+**Interfaces:** exactly SPEC §7 — every input schema, output shape, error code,
+replace-not-append staging, packet-green rule, ≤1500 budget with trim path,
+NO_COUNTEREXAMPLE as error. UI per SPEC §10 (grid, chips, matrix, provenance rail
+with candidates, packet panel, revision badge, disabled Apply). Human edits in the
+UI dispatch to the same store.
 
-- [ ] **Step 1: Failing tests** — happy path for all 5 (assert payload shapes);
-every error code from SPEC §7 provoked once; ≤1500 budget test with a 40-violation
-synthetic state; REVISION_MISMATCH carries currentRevision; canary property test
-from T7 extended over all tools; `read_mapping_session` works with no
-expectedRevision; evidence recorded by find has the exact dep sets T6 expects.
-
-- [ ] **Step 2 FAIL → Step 3 implement (~150 lines) → Step 4 `npm test` green (target: ≥60 tests total now) → Step 5 commit** `T8: five tools + fencing + budget`
+- [ ] **Step 1: Failing tests** — per SPEC §7: 5 happy paths against golden state
+  (find returns oracle witness); every error code provoked once; budget test at the
+  cap (40-violation synthetic state → `truncated:true`, length ≤1500); pin replace
+  semantics; canary sweep across all tools × personas (extends T8's property test).
+- [ ] **Step 2: FAIL** → **Step 3: implement tools (≈150 lines) + render (≈180 lines)**
+- [ ] **Step 4: `npm test` green (target ≥70) AND `--smoke` still exit 0**
+- [ ] **Step 5: Commit** `T9: real tools + full UI`
 
 ---
 
-### Task 9: Page UI + WebMCP registration
+### Task 10: Protocol E2E relay
 
-**Files:**
-- Create: `src/page/index.html`, `src/page/app.js`, `src/page/register.js`,
-  `src/page/style.css`, `harness/serve.mjs`
-- Test: `tests/toplevel.test.mjs` (static check)
+**Files:** Modify `harness/relay.mjs` (add `--e2e`); Create `eval/out/.gitkeep`
 
-**Interfaces:**
-- Consumes: `TOOLS`/`runTool` (T8), store (T6), personas fetched from `data/personas.json`.
-- Produces: served page at `/` with SPEC §9 UI. `register.js` (imported ONLY by
-  `index.html` top-level module script):
-
-```js
-// src/page/register.js — shape measured working in webmcp-probe (SPEC C10)
-import { TOOLS, runTool } from "../tools/defs-browser.js";
-export function registerAll(store, personas, render) {
-  if (typeof document.modelContext === "undefined" || document.modelContext === null) return { present: false };
-  for (const t of TOOLS) {
-    document.modelContext.registerTool({
-      name: t.name, description: t.description, inputSchema: t.inputSchema,
-      annotations: t.annotations,
-      execute: async (args) => {
-        const r = runTool(store, personas, t.name, args ?? {});
-        render();                                   // UI updates BEFORE return (SPEC §7)
-        return { content: [{ type: "text", text: JSON.stringify(r.ok ? r.payload : { error: r.error }) }] };
-      },
-    });
-  }
-  return { present: true, count: TOOLS.length };
-}
-```
-
-  `harness/serve.mjs`: 25-line `node:http` static server rooted at repo (serves
-  `src/page/` at `/`, `src/` and `data/` as-is) — no deps.
-
-- [ ] **Step 1: Failing static test** — `tests/toplevel.test.mjs` walks `src/page/**/*.js`
-import graph (regex on import statements after blanking strings/comments) and asserts
-`registerTool` reachable only from `index.html`'s entry module; asserts the banned
-identifier `navigator.modelContext` appears nowhere in `src/**` or `harness/**`.
-- [ ] **Step 2 FAIL → Step 3 implement page (app.js ~200 lines: render() from
-store.getState(), matrix, chips, provenance rail, revision badge, disabled Apply;
-human edits dispatch to the SAME store the tools use) → Step 4 green + manual
-`npm run serve` eyeball → Step 5 commit** `T9: page + top-level registration`
+- [ ] **Step 1: Encode EVAL.md layer-3 rounds 1–10** (human-sim via
+  `window.__imw.store.dispatch` through Runtime.evaluate; per-round asserts; trace
+  JSON with invocationId/status/payload/ms → `eval/out/relay-<sha>.json`)
+- [ ] **Step 2: run → FAIL** → **Step 3: fix until rounds 5/9/10 show their
+  failure/recovery pairs** → **Step 4: exit 0, trace committed**
+- [ ] **Step 5: Commit** `T10: protocol E2E, 10 rounds, stale+recovery+pin-coverage`
 
 ---
 
-### Task 10: CDP harness + Layer-2 smoke
+### Task 11: Scorer + ablation + report
 
-**Files:**
-- Create: `harness/chrome.mjs`, `harness/cdp.mjs`, `harness/relay.mjs` (`--smoke` mode)
+**Files:** Create `eval/scorer.mjs`, `eval/ablation.mjs`, `eval/run.mjs`,
+`eval/interaction-model.md`
 
-**Interfaces:**
-- Produces: `launchChrome({port, userDataDir}) -> {proc, wsUrl}` (flags per SPEC C3:
-  `--enable-features=WebMCP --headless=new --remote-debugging-port --user-data-dir`,
-  fresh dir per launch); `cdp.mjs`: minimal WebSocket JSON-RPC client (node:http
-  upgrade, ~80 lines, no deps) with `send(method, params, sessionId)` and `on(fn)`;
-  `invokeTool(cdp, sessionId, name, args, {timeoutMs}) -> {status, payloadText} |
-  {sendError}` correlating `WebMCP.invokeTool` → `WebMCP.toolResponded` by
-  invocationId (SPEC C5; -32602 at send = distinct path).
-- Smoke asserts: presence via Runtime.evaluate; `(await getTools()).length === 5`
-  (C6); one full invokeTool round trip Completed (C7 — the round trip IS the
-  discriminator); DOM matrix updated before response observed.
+**Interfaces:** per EVAL.md r2 — scorer maps DC1–DC4 → relay observations vs
+oracle; ablation runs the SAME `src/` engine over `persisted-snapshot.json`,
+reports visible classes with the by-construction label verbatim; `run.mjs` writes
+`eval/out/report.json {layers, scorer, ablation, oracleAudited, killLines}`,
+exit 2 while `oracle.audited` is false, exit 0 only with all thresholds met.
 
-- [ ] **Step 1: write `--smoke` asserting the above → Step 2 run → FAIL →
-Step 3 implement → Step 4 `node harness/relay.mjs --smoke` exit 0 → Step 5 commit** `T10: CDP harness + smoke`
+- [ ] **Step 1: thresholds transcribed from EVAL.md as data; failing run**
+- [ ] **Step 2–3: implement scorer/ablation/run (≈120 lines total)**
+- [ ] **Step 4: `node eval/run.mjs` → expected exit 2 with watermark
+  `oracleAudited:false` and everything else green (audit flip is human-only)**
+- [ ] **Step 5: Commit** `T11: scorer + labeled ablation + gated report`
 
 ---
 
-### Task 11: Layer-3 E2E relay
+### Task 12: Verifier + deploy config + submission docs + HALT
 
-**Files:**
-- Modify: `harness/relay.mjs` (add `--e2e`)
-- Create: `eval/out/.gitkeep`
+**Files:** Create `tools/verify.mjs`, `render.yaml`, `docs/DEMO-SCRIPT.md`,
+`docs/DEVPOST-DRAFT.md`, `docs/EVIDENCE-CHECKLIST.md`; Modify `README.md`
 
-- [ ] **Step 1: encode EVAL.md Layer-3 rounds 1–8 as a script** (human edit =
-`Runtime.evaluate` dispatching EDIT_EXPRESSION; assertions per round; trace JSON
-with every invocationId/status/payload/ms written to `eval/out/relay-<sha>.json`)
-- [ ] **Step 2 run → FAIL → Step 3 fix page/tools until every round asserts →
-Step 4 exit 0 + trace committed → Step 5 commit** `T11: E2E relay green + trace`
+**Interfaces:** `tools/verify.mjs` — the ONLY authority for done: re-runs
+`npm test`, `--smoke`, `--e2e`, `eval/run.mjs`; greps this plan for unchecked
+boxes in T1–T11; prints exactly one of `STATUS CODE_COMPLETE` /
+`STATUS INCOMPLETE <reason>` / `STATUS ABORT_GATE <K-id>` (evaluates K4/K5
+clock+artifact conditions from EVAL.md). CODE_COMPLETE does NOT claim
+ENTRY_READY — the human checklist in `docs/EVIDENCE-CHECKLIST.md` owns that
+(deploy, ChatGPT evidence, oracle audit flip, video, Devpost, flip-public).
 
----
-
-### Task 12: Benchmark arms + report + thresholds
-
-**Files:**
-- Create: `eval/arm-native.mjs`, `eval/arm-api.mjs`, `eval/run.mjs`
-
-**Interfaces:**
-- `arm-api.mjs` (the kill arm): loads `data/persisted-snapshot.json` — the T1
-  fixture state MINUS dirty expression edits MINUS pins (create it here; it is what
-  a saved-state API client could fetch) — runs the SAME engine + checker, reports
-  per-defect-class recall. EXPECTED: D1/D3/D5 classes invisible (they live in dirty
-  edits + pins); if recall ≥ (C recall − 5%) → print `KILL K1 FIRED` and exit 3.
-- `arm-native.mjs`: interaction-count model (personas × fields), labeled SIMULATED.
-- `eval/run.mjs`: runs arm A, arm B, reads latest relay trace (arm C), computes
-  EVAL.md threshold table, writes `eval/out/report.json`
-  `{arms, thresholds: {name, value, pass}, killLines: {K1..K3, fired}, oracleAudited}`,
-  prints summary, exit 0 only if all PASS thresholds hold and no kill line fired.
-
-- [ ] **Step 1: thresholds encoded as data (copy EVAL.md numbers) → Step 2 run →
-expect arm B to fail-loud until snapshot semantics right → Step 3 fix →
-Step 4 `node eval/run.mjs` exit 0, report committed → Step 5 commit** `T12: 3-arm report + kill-line checks`
+- [ ] **Step 1: write verify.mjs + render.yaml (publish `.`, no build) + the three
+  docs in full prose (30s/3min shot lists from SPEC §11; Devpost 4 answers with
+  concessions #1/#2 up front; evidence checklist with the five human tasks + the
+  remote stale/recovery beat)**
+- [ ] **Step 2: `node tools/verify.mjs` prints STATUS INCOMPLETE naming exactly the
+  human-gated remainder → commit** `T12: verifier + deploy + submission docs`
+- [ ] **Step 3: loop protocol — when verify prints `STATUS CODE_COMPLETE`, append
+  the line to PROGRESS.md and output `<promise>IDENTITYMAP HALT</promise>`; when it
+  prints `STATUS ABORT_GATE`, write POSTMORTEM.md, tag `abort/<date>`, append
+  STATUS ABORTED to PROGRESS.md, and output the SAME halt promise (the promise ends
+  the loop; PROGRESS.md carries which ending it was)**
 
 ---
 
-### Task 13: Deploy + submission drafts (loop does the automatable slice)
+## Schedule map (PT) — sol-estimate-adjusted, scope already cut to fit
 
-**Files:**
-- Create: `render.yaml` (static site: publish `src/page` + `src/` + `data/`),
-  `docs/DEMO-SCRIPT.md` (30s + 3min from SPEC §10, shot-by-shot),
-  `docs/DEVPOST-DRAFT.md` (4 answers, honest-concession framing from SPEC §2),
-  `docs/EVIDENCE-CHECKLIST.md` (the human-gated list below, checkbox form)
-- Modify: `README.md` (run instructions, designed-not-run disclosures)
-
-- [ ] **Step 1: write all four docs (no placeholders — full prose)**
-- [ ] **Step 2: `git commit` then STOP — everything below is HUMAN-GATED and the
-  loop must NOT attempt it:** Render deploy auth/click, custom domain, ChatGPT-browser
-  evidence PNG, video recording, Devpost account actions, repo flip-public.
-- [ ] **Step 3: loop outputs the completion promise ONLY when T1–T13 boxes are all
-  checked AND `npm test` + `--smoke` + `--e2e` + `eval/run.mjs` all exit 0 in the
-  CURRENT iteration (re-run, don't trust old output — D-38).**
-
----
-
-## Schedule map (PT)
-
-| window | tasks | gate |
+| window | tasks | tripwire |
 |---|---|---|
-| 08-29 eve | T1–T4 | — |
-| 08-30 | T5–T9 | — |
-| 08-31 | T10–T12 | **K4 18:00: layers 1–2 green or ABORT** |
-| 09-01 | T13 + human: deploy, ChatGPT evidence | **K5 21:00: remote demo runs or ABORT** |
-| 09-02 | human: video (AFTER outpocket D4), Devpost drafts final | — |
-| 09-03 am | human: submit; freeze rehearsal | 13:00 deadline |
-
-ABORT = write `POSTMORTEM.md`, tag `abort/<date>`, stop the loop, return to outpocket.
+| 08-29 eve | T1 | — |
+| 08-30 am | T2 | **K0 14:00: slice + smoke green or scope-cut council (drop preview_mapping_patch + round 7)** |
+| 08-30 pm | T3–T6 | — |
+| 08-31 am | T7–T9 | — |
+| 08-31 pm | T10–T11 | **K4 18:00: `npm test`+`--smoke` green or ABORT** |
+| 09-01 | T12; human: deploy, ChatGPT evidence, oracle audit | **K5 21:00** |
+| 09-02 | human: video (after outpocket D4), Devpost draft final | — |
+| 09-03 am | human: submit; freeze rehearsal | 13:00 |
 
 ## Self-review (writing-plans checklist)
 
-- Spec coverage: SPEC §4→T6, §5→T4, §6→T2/T3, §7→T8, §8→T7, §9/§10→T9/T13,
-  C1–C10→T9/T10 asserts + toplevel test; EVAL layers 1/2/3→T1–T8/T10/T11; arms→T12. No gaps found.
-- Placeholder scan: none ("~N lines" annotations describe size, each carries the
-  actual algorithm/contract; oracle rows authored in T1 step 4 by hand as stated).
-- Type consistency: persona/evidence/action/tool-result shapes named identically in
-  T1/T3/T6/T8 interface blocks; `runTool(store, personas, name, args)` signature
-  used in T8, T9, tests.
+- Spec coverage: §4→T1, §5→T5, §6→T3/T4, §7→T9, §8→T7, §9→T8, §10→T2/T9/T12,
+  §11→T12 docs; C1–C10→T2 asserts + toplevel test; EVAL layers→T1–T9/T2/T10;
+  scorer/ablation/gates→T11/T12. Direction removed everywhere (grep `direction`
+  returns only this line and the cut notice).
+- Placeholder scan: none; every contract names exact shapes; sizes are estimates
+  annotating real algorithms.
+- Type consistency: persona/evidence-fingerprint/action/tool-result shapes match
+  across T1/T7/T9 interface blocks; `runTool(store, personas, name, args)` used in
+  T2/T9 and tests; `window.__imw` defined T2, consumed T10.

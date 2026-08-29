@@ -1,43 +1,49 @@
-# RALPH.md — the loop that builds this repo
+# RALPH.md — the loop that builds this repo (r2, post-review)
 
-Executor: the `ralph-loop` Claude Code plugin (same prompt re-fed every iteration;
-state lives in files + git history; completion via `<promise>` tag).
+Executor: the `ralph-loop` Claude Code plugin. Same prompt each iteration; memory =
+plan checkboxes + PROGRESS.md + git log. r2 changes: single HALT promise for both
+endings (review finding: an ABORT promise the plugin never matches keeps looping),
+external verifier `tools/verify.mjs` as the only completion authority, executable
+clock gates, explicit no-self-check rule.
 
-## Launch command (run from this repo root, in a fresh Claude Code session)
+## Launch command (repo root, fresh Claude Code session)
 
 ```
-/ralph-loop "You are building IdentityMap Witness in /Users/calebwei/mcp/identitymap-witness. Each iteration: (1) Read CLAUDE.md, then docs/plans/2026-08-29-identitymap-witness.md; find the FIRST unchecked '- [ ]' step. (2) Execute that step and, if it completes a task's step 5, the commit. Follow the plan's code and interfaces exactly; where the plan gives a contract not code, TDD it: failing test first, minimal implementation, green, commit. (3) Re-run 'npm test' before every commit; a task is done only when its gate command exits 0 in THIS iteration. (4) Check the box in the plan file and commit the edit with the code. (5) Append one line to PROGRESS.md: '<iteration-ISO-time> T<n> step<k> <green|red> <one fact from command output>'. HARD RULES: never touch /Users/calebwei/mcp/outpocket; never register an apply/save/push tool; never let a CANARY_ string leave a tool payload; the identifier navigator.modelContext must not appear in src/ or harness/; numbers only from command output; do not attempt human-gated steps (Render auth, ChatGPT-browser evidence, video, Devpost, repo flip-public) — when only those remain, stop and report. KILL GATES: if the plan's K4/K5 schedule gates have passed and their conditions are unmet, write POSTMORTEM.md and output <promise>IDENTITYMAP ABORTED</promise>. COMPLETION: when every checkbox in the plan is checked AND npm test AND node harness/relay.mjs --smoke AND node harness/relay.mjs --e2e AND node eval/run.mjs all exit 0 freshly re-run this iteration, output <promise>IDENTITYMAP COMPLETE</promise>." --completion-promise "IDENTITYMAP COMPLETE" --max-iterations 45
+/ralph-loop "You are building IdentityMap Witness in /Users/calebwei/mcp/identitymap-witness. Each iteration, in order: (0) Run 'date'; compare against the gate table in docs/plans/2026-08-29-identitymap-witness.md Schedule map. If K4 or K5 has passed with its condition unmet, follow the plan's T12 step-3 ABORT protocol and end with <promise>IDENTITYMAP HALT</promise>. (1) Read CLAUDE.md, then the plan; find the FIRST unchecked '- [ ]' line. (2) Do that step exactly as written — contracts and code in the plan are binding; TDD where the plan gives a contract without code. A failing-test step commits NOTHING; the test lands with its implementation at the task's commit step. (3) Before any commit, re-run 'npm test' and any gate the task names; commit only green trees; message prefix 'T<n>:'. (4) Check the box you completed IN THE PLAN FILE and include that edit in the same commit. (5) Append to PROGRESS.md: '<ISO-time> T<n> step<k> <green|red> <one fact copied from command output>'. (6) If T1–T12 boxes all look checked, DO NOT declare done yourself: run 'node tools/verify.mjs' and obey its STATUS line — CODE_COMPLETE: append it to PROGRESS.md and output <promise>IDENTITYMAP HALT</promise>; INCOMPLETE: fix what it names; ABORT_GATE: follow the ABORT protocol then output the same promise. HARD RULES: never touch /Users/calebwei/mcp/outpocket; never register an apply/save/push tool; no CANARY_ substring may leave a tool payload; the identifier navigator.modelContext must not appear in src/, harness/, or app.js; numbers only from command output; never edit data/golden-walk.md or the oracle 'audited' field after T1; never attempt human-gated work (accounts, Render deploy auth, ChatGPT-browser evidence, oracle audit flip, video, Devpost, flip-public) — when only that remains, run the verifier and halt on its STATUS." --completion-promise "IDENTITYMAP HALT" --max-iterations 45
 ```
 
-Notes:
-- `--max-iterations 45`: 13 tasks × ~3 iterations + slack. The loop also self-stops
-  on the ABORT promise; `--completion-promise` only matches COMPLETE, so an ABORT
-  ends by max-iterations or by the human running `/cancel-ralph` after reading
-  POSTMORTEM.md. Check PROGRESS.md whenever you look in.
-- The loop's memory is: plan checkboxes + PROGRESS.md + git log. It re-reads them
-  every iteration; that is the Ralph mechanism, not a defect.
+Loop-wedge countermeasures (each maps to a review finding):
+- False completion: the promise is only legal after `tools/verify.mjs` prints
+  `STATUS CODE_COMPLETE` in the SAME iteration — the verifier re-runs every gate
+  itself, so stale green can't be replayed.
+- Circular final checkbox: verify greps T1–T11 boxes + T12 steps 1–2 only; T12
+  step 3 is the halt protocol, not a box the verifier needs.
+- Wedged-red thrash: three consecutive PROGRESS.md `red` lines on the same step ⇒
+  the iteration must write `STUCK:<step>:<hypothesis>` to PROGRESS.md and attempt
+  the SMALLEST scope cut the plan's K0 tripwire authorizes, or halt via ABORT
+  protocol if none applies. (The human reads PROGRESS.md, not the loop's chat.)
+- CODE_COMPLETE ≠ ENTRY_READY: the verifier says so in its output; ENTRY_READY
+  lives only in docs/EVIDENCE-CHECKLIST.md and only a human checks those boxes.
 
-## Human-gated queue (the loop stops in front of these; you do them)
+## Human-gated queue (the loop halts in front of these)
 
 | when | what | est |
 |---|---|---|
-| after T12 green | Render deploy (static site from render.yaml), note the URL in README | 20m |
-| 09-01 | ChatGPT built-in browser (⌘T): open deployed URL, consent gate, 5 tools listed, counterexample round trip; capture evidence/chatgpt-run.png + transcribed JSON (V1 style) | 30m |
-| 09-01 | Oracle audit: row-by-row check of data/oracle.json, then commit with trailer `Oracle-Audited: yes` | 60m |
-| 09-02 | Video <3min, audio, remote origin, consent click visible; first 10–15s = running result (AFTER outpocket D4 is recorded) | 2–3h |
-| 09-03 am | Devpost submission from docs/DEVPOST-DRAFT.md; repo flip-public + MIT LICENSE | 45m |
+| after T11 | Render deploy (static, publish `.`), URL into README | 20m |
+| 09-01 | ChatGPT built-in browser (⌘T): deployed URL, consent gate on camera, 5 tools, witness round trip, AND the live stale/recovery beat; capture evidence/chatgpt-run.png + transcribed JSON (V1 style: transcribe, never infer) | 45m |
+| 09-01 | Oracle audit: row-by-row vs data/golden-walk.md; commit flipping `audited:true` with trailer `Oracle-Audited: yes` | 60m |
+| 09-02 | Video <3min, audio, remote origin, consent click visible, result in first 10–15s (AFTER outpocket D4 records) | 2–3h |
+| 09-03 am | Devpost submission from docs/DEVPOST-DRAFT.md; LICENSE (MIT) + flip repos public | 45m |
 
-## Interlock with outpocket ERP (binding)
+## Interlock with outpocket ERP (binding, unchanged)
 
-- This project NEVER runs its loop while you are inside an outpocket seat window
-  that needs the same machine's Chrome for evidence capture.
-- outpocket D4 (their video) records BEFORE this project's video on 09-02.
-- Any conflict for your hands resolves in outpocket's favor until its D5
-  (submission) is done. Two 80% submissions lose to one 95% + one honest spike.
+- Loop never runs while an outpocket seat needs this machine's Chrome for evidence.
+- outpocket D4 records before this project's video; conflicts for your hands
+  resolve in outpocket's favor until its D5 is submitted.
 
 ## Abort semantics
 
-K4 (08-31 18:00 PT, layers 1–2 not green) or K5 (09-01 21:00 PT, no remote ChatGPT
-run) → the loop writes POSTMORTEM.md (what got built, what fired, what the spike
-proved/disproved), tags `abort/<date>`, outputs the ABORT promise. The Okta public-API
-evidence and the engine survive as commercial-spike assets either way.
+ABORT (gate-fired or STUCK-with-no-cut) = POSTMORTEM.md (what got built, which
+gate fired, what the spike proved/disproved — the Okta API evidence and the engine
+survive as commercial-spike assets), tag `abort/<date>`, PROGRESS.md `STATUS
+ABORTED`, halt promise. `/cancel-ralph` is the human override at any time.

@@ -13,7 +13,9 @@ evidence invalidation when the human edits mid-session. The agent never applies.
 - Build plan: `docs/plans/2026-08-29-identitymap-witness.md`. Execution: `RALPH.md`.
 - Key third-party evidence: `evidence/okta-public-api-2026-08-29.md`.
 
-Status: planning complete, awaiting adversarial review + loop start.
+Status: plan r2 — reviewed by codex gpt-5.6-sol (ultra) 2026-08-29, all 17 P1
+findings addressed or scope-cut (`reviews/codex-sol-2026-08-29.md`); reviewer's
+win estimate 3% as-planned / 12% with fixes. Awaiting go/no-go before loop start.
 
 ```bash
 npm test                        # layer 1

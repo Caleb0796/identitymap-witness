@@ -1,104 +1,118 @@
-# IdentityMap Witness — EVAL & TEST protocol
+# IdentityMap Witness — EVAL & TEST protocol (r2, post-review)
 
-Companion to `SPEC.md`. Numbers reported anywhere must come from a command's printed
-output in the same session (outpocket rule D-38 applies here verbatim). Every eval run
-writes its raw trace under `eval/out/` and is committed.
+Companion to `SPEC.md` r2. Numbers reported anywhere come from command output in the
+same session (D-38). Raw traces under `eval/out/`, committed. r2 changes after the
+sol review: direction cut; arm relabeling (no "three-arm benchmark" headline); K1
+demoted from kill line to stated expectation; machine-readable scorer required;
+executable gates; audited-oracle gate wired into the report.
+
+## What the evaluation claims — and refuses to claim
+
+- CLAIMS: the mechanism works end-to-end (layers 1–3), the redaction and fencing
+  guards hold under attack tests, and the four seeded defect classes are recovered
+  with an auditable minimal witness against a frozen, human-audited oracle.
+- REFUSES: any competitive superiority number vs Browser-Use / Full-CDP (not run),
+  any "API cannot do this" claim (the ablation is by-construction and labeled so),
+  any agent-quality claim from the scripted driver (it is protocol E2E; the real
+  agent evidence is the human ChatGPT-browser run).
 
 ## Layer 1 — deterministic unit tests (`npm test` = `node --test`)
 
-| suite | file | what it proves |
-|---|---|---|
-| lexer/parser | tests/parser.test.mjs | grammar of SPEC §6 exactly; anything else → INVALID_AST |
-| eval semantics | tests/eval.test.mjs | null vs "" table, concat poisoning, ternary branches, priority resolution incl. present-but-empty wins |
-| provenance | tests/prov.test.mjs | every value carries {source, inputs, branch}; D4 conflict provenance names the losing source |
-| invariants | tests/invariants.test.mjs | 3 types × pass/violate × edge (null category, absent group) |
-| witness search | tests/witness.test.mjs | finds ALL seeded violations; returned set is minimal (== oracle minimum, which is 2 in the fixture); deterministic order |
-| reducer/revision | tests/reducer.test.mjs | every action bumps revision exactly once; closure invalidation marks exactly the evidence whose deps intersect the edit (and no other) |
-| tools | tests/tools.test.mjs | all 5 tools: happy path, every error code in SPEC §7, payload ≤1500 chars, REVISION_MISMATCH carries currentRevision |
-| redaction | tests/redact.test.mjs | no CANARY_ substring in any payload across every tool × every fixture persona; identity diffs = "<redacted:changed>" |
+| suite | proves |
+|---|---|
+| fixture | 8 personas; canaries on firstName/lastName/email in EVERY source profile (okta+hris+ad); DC1–DC4 carrier personas present; P1 clean |
+| golden walk | `data/golden-walk.md` hand-derived table == machine recomputation later (T4 wires this cross-check) |
+| parser | SPEC §6 grammar exactly; out-of-grammar → INVALID_AST with position |
+| evaluator | priority resolution, present-but-empty wins (DC4), null poisons concat, `""` vs null equality table, ternary branch capture |
+| provenance | candidates chain lists every consulted source; P4 case names losing `hris` candidate explicitly |
+| invariants | 3 types × pass/violate; checker case-insensitive where SPEC §5 says so (DC1 asymmetry test) |
+| witness | finds all 4 seeded violations; exhaustive minimal set == oracle (size 3, both valid sets accepted); deterministic tie-break; single-invariant → size 1; clean draft → NO_COUNTEREXAMPLE path at tool layer |
+| store | mutations bump revision exactly once; recordEvidence/recordPacket do NOT bump; fingerprint invalidation table: EDIT_EXPRESSION stales find-evidence + only matching preview-evidence; SET_PRIORITY stales all; pin changes flip packet coverage; **clean→violating**: edit a clean field into a violating expr → old evidence stale AND re-find catches the new violation |
+| tools | all 5 happy paths against golden state; EVERY error code in SPEC §7 provoked (incl. NO_COUNTEREXAMPLE as error, BAD_RULE on unknown pin, INVALID_AST position, UNKNOWN_PERSONA, STALE_EVIDENCE staleIds, PII_GUARD); ≤1500 budget at the cap with truncation path; REVISION_MISMATCH carries currentRevision; pin replace-not-append |
+| redaction | canary sweep over every tool × every persona × keys AND values AND candidates AND diffs; crafted leak in a payload KEY caught; `<redacted:changed>` on identity diffs |
 
-Gate: `npm test` exit 0, 0 fail, 0 skip. Target ≥ 60 tests.
+Gate: exit 0, 0 fail, 0 skip. Target ≥ 70 tests.
 
-## Layer 2 — page/registration integration (local Chrome 152)
+## Layer 2 — registration + protocol smoke (local Chrome 152)
 
-Harness `harness/relay.mjs` (patterns from outpocket/harness/drive.mjs, reimplemented —
-outpocket is frozen, nothing is imported from it):
-- launch Chrome 152 with `--enable-features=WebMCP --headless=new --remote-debugging-port=<p> --user-data-dir=<fresh>` serving `src/page/` over `http://127.0.0.1:<port>`
-- presence: `Runtime.evaluate` → `typeof document.modelContext !== "undefined"`
-- tool count: `(await document.modelContext.getTools()).length === 5`
-- calls by name via CDP `WebMCP.invokeTool` / `WebMCP.toolResponded` correlation (SPEC C5)
-- asserts: page DOM reflects each call BEFORE its response (matrix cell count read via
-  Runtime.evaluate inside the toolResponded window is already updated)
+`node harness/relay.mjs --smoke` (launcher/CDP client built in plan T2, patterns
+retyped from outpocket, nothing imported):
+presence via completed round trip (C7), `(await getTools()).length === 5` (C6),
+one invokeTool Completed with DOM matrix updated before response, one -32602
+unknown-name send rejection, **repeated cold sessions ×3 with fresh user-data-dir
+and cleanup** (review finding: single-shot smoke hid launch flakiness).
+Gate: exit 0.
 
-Gate: `node harness/relay.mjs --smoke` exit 0.
+## Layer 3 — protocol E2E relay (scripted; labeled protocol, not agent)
 
-## Layer 3 — E2E relay eval (the 5-round story, scripted)
+`node harness/relay.mjs --e2e`, one browser session, rounds:
+1. read_mapping_session → r17
+2. stage_mapping_invariants(3 pins) → r18
+3. find_mapping_counterexample → witness {P2,P3,P4|P5}, evidence recorded
+4. HUMAN-SIM: `window.__imw.store.dispatch(EDIT_EXPRESSION managerId fix)` via
+   Runtime.evaluate → r19; assert find-evidence stale
+5. prepare_mapping_review(old ids) → MUST fail STALE_EVIDENCE
+6. re-find → fresh evidence; violations no longer include P3/inv-null
+7. preview_mapping_patch on `group` fix over {P2} → diff redacted-clean
+8. HUMAN-SIM applies group fix + priority fix → re-find → NO_COUNTEREXAMPLE error
+   (all resolved) → prepare over remaining fresh evidence → packet `blockers:[]`
+9. recovery: wrong expectedRevision → REVISION_MISMATCH → corrected retry succeeds
+10. pin add mid-session: PIN_INVARIANTS with a 4th trivial pin → old packet
+    incomplete-by-coverage (blocker `uncovered`), then unpin restores
+Trace with every invocationId/status/payload/ms → `eval/out/relay-<sha>.json`.
+Gate: exit 0 AND rounds 5, 9, 10 each show their failure/recovery pair.
 
-`node harness/relay.mjs --e2e` drives, in one browser session:
-1. agent: read_mapping_session → r17
-2. agent: stage_mapping_invariants(3 pins) → r18
-3. agent: find_mapping_counterexample → evidence E1..En (expects 2 personas)
-4. HUMAN SIMULATED: Runtime.evaluate dispatches EDIT_EXPRESSION(managerId) → r19; harness asserts evidence deps on managerId → stale, others NOT stale
-5. agent: prepare_mapping_review(old evidence) → MUST fail STALE_EVIDENCE
-6. agent: find_mapping_counterexample (incremental) → fresh evidence
-7. agent: prepare_mapping_review → packet green, coverage 3/3
-8. failure recovery: invoke with wrong expectedRevision → REVISION_MISMATCH → recover in one retry
-Trace → `eval/out/relay-<git-sha>.json` (every invocationId, status, payload, timing).
+## Scorer + ablation (honest labels replace the old "3-arm benchmark")
 
-Gate: exit 0 AND trace shows stale-rejection round trip AND zero Canceled/timeout.
+`eval/scorer.mjs`: machine-readable map `defect class → {persona, field, invariant}`
+(from `data/defects.md`, frozen at T1) → reads the relay trace → per-class
+found/missed + witness-minimality check vs `data/oracle.json`. No prose numbers.
 
-## Benchmark — 3 arms run, 2 arms designed-not-run
+`eval/ablation.mjs` (relabeled — NOT a competitive arm, NOT a kill):
+input = `data/persisted-snapshot.json` (the last-saved state: pre-session
+expressions, pre-session priority, no pins — authored at T1 next to the golden
+state, frozen). Runs the same engine. Reports which of DC1–DC4 are visible.
+EXPECTED AND LABELED: 0/4 — the defects are session-introduced BY CONSTRUCTION;
+the number quantifies the workflow property "today's mistakes live pre-save",
+not superiority. The report prints this label verbatim.
 
-Fixture (`data/personas.json` + `data/defects.md`): 8 personas × 2 directions.
-Seeded defect classes:
-- D1 wrong-direction write (bidirectional row writes app→user when direction says user→app)
-- D2 case-sensitive group compare ("Employees" vs "employees")
-- D3 managerless EU persona gets non-null managerId
-- D4 HRIS/AD priority conflict on department
-- D5 null ≠ empty ("" treated as missing)
-Oracle: `data/oracle.json` — expected value + provenance source per (persona, field,
-direction) + invariant truth table + minimal witness set (= 2). HUMAN-AUDITED: Caleb
-signs a commit trailer `Oracle-Audited: yes` after row-by-row check (~1h). Until that
-commit exists, every report is watermarked `oracle: UNAUDITED`.
+`eval/interaction-model.md` (was "arm A"): the per-persona manual-preview count
+model moves to prose with its assumptions; it is NOT in report.json (review
+finding: a formula is not an observed arm).
 
-| arm | what runs | metrics captured |
-|---|---|---|
-| A native-preview (simulated) | scripted model of per-persona manual Preview: interactions = personas × fields checked; label SIMULATED in report | human interaction count |
-| B API + same engine (the kill arm) | node script given persisted snapshot ONLY (no dirty edits, no pins) + the SAME engine | defect recall, which classes invisible |
-| C WebMCP | Layer-3 run over the full fixture | recall, FP, minimal-set size, interactions, stale/PII counters |
-| Browser-Use | DESIGNED-NOT-RUN (time). Design in this file, absence stated in README + video | — |
-| Full-CDP | DESIGNED-NOT-RUN (time). Same disclosure | — |
+Browser-Use / Full-CDP: designs remain in this file's git history; they are
+DESIGNED-NOT-RUN and appear in README + video limitations, never in claims.
 
-Report: `node eval/run.mjs` → `eval/out/report.json` + human-readable summary printed.
+`eval/run.mjs`: layer gates → scorer → ablation → `eval/out/report.json`
+`{layers, scorer: {classes, witness}, ablation, oracleAudited, killLines}`;
+**refuses (exit 2) to write an un-watermarked report while `oracle.audited` is
+false** — flipping it requires the human audit commit (trailer `Oracle-Audited: yes`);
+the automated loop is forbidden to flip it (also asserted by a test that the
+string stays false in loop commits — commit author check).
 
-## Thresholds (pre-registered — written before any arm runs)
+## Pass thresholds (pre-registered)
 
-PASS requires ALL:
-- C recall 5/5 defect classes; false positives ≤ 1
-- C minimal witness set size == oracle minimum (2)
-- stale mutations = 0; wrong-direction writes = 0; PII canary leaks = 0
-- B (API arm) recall ≤ 3/5 — i.e. dirty-only defects (those introduced by unsaved
-  edits/pins) are invisible to it BY MEASUREMENT, not by assertion
-- A interaction count ≥ 2× C interaction count
+ALL of: scorer 4/4 classes; false positives ≤ 1; witness size == 3 matching an
+oracle set; stale mutations = 0; unauthorized-write count = 0 (no tool ever
+dispatches a draft mutation — asserted by store instrumentation in the relay);
+PII canary leaks = 0; layer gates all exit 0; report watermark `oracleAudited: true`.
 
-KILL lines (any one fires → stop, write postmortem, fold into outpocket ERP):
-- K1: arm B recall within 5% of arm C on the same fixture → the WebMCP layer added nothing
-- K2: any CANARY_ leak that survives a fix attempt same-day
-- K3: any stale-evidence packet accepted (fencing broken) that survives a fix attempt same-day
-- K4: schedule gate — by 2026-08-31 18:00 PT Layers 1–2 not green → abort project
-- K5: demo does not run in the real ChatGPT built-in browser against the deployed
-  remote origin by 2026-09-01 21:00 PT → abort to ERP-only endgame
+## Kill / abort gates (all executable — a script can evaluate each)
 
-Resolved before coding started: the spec-card kill line "public preview endpoint covers
-arbitrary batch profiles" did NOT fire — Okta public API = list/get/update only
-(`evidence/okta-public-api-2026-08-29.md`, captured 2026-08-29). The undocumented
-admin-console preview XHR remains UNTESTED and is disclosed as such wherever arm
-results are shown (it belongs to a CDP-class arm, which is designed-not-run).
+- K2 PII: any canary leak reproducible on re-run after one fix commit → kill.
+  (`node eval/run.mjs` twice, same leak twice = fired.)
+- K3 fencing: any STALE evidence accepted into a green packet in layer 3 → kill
+  (same two-run rule).
+- K4 schedule: at 2026-08-31T18:00 PT, `npm test` or `--smoke` non-zero → abort.
+  Loop checks wall clock each iteration (`date`) against gate table in RALPH.md.
+- K5 runtime: at 2026-09-01T21:00 PT, no committed `evidence/chatgpt-run.png` +
+  transcription (human task) → abort to ERP-only endgame.
+- K1 is RETIRED as a kill (review: non-falsifiable as written). Its replacement
+  is the labeled ablation expectation above.
 
-## Evidence pack (what ships with the submission)
+## Evidence pack for submission
 
-- `eval/out/report.json` + all relay traces (committed)
-- ChatGPT-browser run: PNG + transcribed JSON, V1-style (HUMAN task, ~30min)
-- deployed URL (Render static) + public repo (MIT) — flip public only after freeze
-- video <3min with audio; first 10–15s show the running result; recorded on the
-  remote origin with the consent gate visible (SPEC C9)
+report.json + relay traces; ChatGPT-browser human run (PNG + transcribed JSON,
+V1-style) **including the remote stale/recovery beat** (round-5 equivalent done
+live — review finding); deployed URL; public repo (MIT) flipped only at freeze;
+video <3min, audio, remote origin, consent gate visible, first 10–15s = result.
