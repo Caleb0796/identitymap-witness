@@ -55,6 +55,18 @@ const PINS = [
   { id: "inv-null", type: "null_if_missing", field: "managerId", dependsOn: "managerId" },
   { id: "inv-sot", type: "source_of_truth", field: "department", source: "hris" },
 ];
+const HOSTILE_PIN = {
+  type: "forbidden_group",
+  personaCategory: "x",
+  group: "<img src=x onerror=window.__pwned=1>",
+};
+const HOSTILE_ID = "<img src=x onerror=window.__pwned=2>";
+const HOSTILE_ID_PIN = {
+  id: HOSTILE_ID,
+  type: "forbidden_group",
+  personaCategory: "contractor",
+  group: "employees",
+};
 
 // ── layer 2 ──────────────────────────────────────────────────────────────────
 async function smokeSession(round, baseUrl) {
@@ -71,16 +83,40 @@ async function smokeSession(round, baseUrl) {
     assertEq(payload.revision, 17, "read revision");
     assertEq(payload.personaCount, 8, "personaCount");
 
+    const stagedPins = round === 1 ? [HOSTILE_ID_PIN] : PINS;
     const stage = await invokeTool(s.cdp, s.sessionId, s.frameId, "stage_mapping_invariants",
-      { expectedRevision: 17, invariants: PINS });
+      { expectedRevision: 17, invariants: stagedPins });
     if (!stage.roundTrip) throw new Error("stage round trip failed");
-    assertEq(JSON.parse(textOf(stage.output)).revision, 18, "stage revision");
+    const staged = JSON.parse(textOf(stage.output));
+    assertEq(staged.revision, 17, "stage revision");
+    assertEq(staged.status, "pending_confirmation", "stage status");
+    const confirmed = await s.evalJs(`(() => {
+      const button = document.querySelector("#confirm-pending");
+      if (!button) throw new Error("missing #confirm-pending");
+      button.click();
+      return window.__imw.store.getState().revision;
+    })()`);
+    assertEq(confirmed, 18, "DOM confirm revision");
 
     const find = await invokeTool(s.cdp, s.sessionId, s.frameId, "find_mapping_counterexample", { expectedRevision: 18 });
     if (!find.roundTrip) throw new Error("find round trip failed");
-    assertEq(JSON.parse(textOf(find.output)).personaIds, ["P2", "P3", "P4"], "witness");
+    const found = JSON.parse(textOf(find.output));
+    assertEq(found.personaIds, round === 1 ? ["P2"] : ["P2", "P3", "P4"], "witness");
     const rows = await s.evalJs('document.querySelectorAll("#matrix tbody tr").length');
-    assertEq(rows, 4, "matrix rows after find");
+    assertEq(rows, round === 1 ? 1 : 4, "matrix rows after find");
+    if (round === 1) {
+      await s.evalJs("new Promise((resolve) => setTimeout(resolve, 0))", { awaitPromise: true });
+      const hostileDom = await s.evalJs(`({
+        pwned: typeof window.__pwned,
+        imageCount: document.querySelectorAll("#pins img, #matrix img").length,
+        pinText: document.querySelector("#pins code")?.textContent,
+        matrixText: document.querySelector("#matrix td.viol")?.textContent,
+      })`);
+      assertEq(hostileDom.pwned, "undefined", "hostile confirmed id did not execute");
+      assertEq(hostileDom.imageCount, 0, "hostile confirmed id created no image element");
+      assertEq(hostileDom.pinText, HOSTILE_ID, "hostile confirmed id is exact pin text");
+      assertEq(hostileDom.matrixText, HOSTILE_ID, "hostile confirmed id is exact matrix text");
+    }
 
     const nope = await invokeTool(s.cdp, s.sessionId, s.frameId, "no_such_tool", {});
     if (!nope.sendRejected || nope.cdp?.code !== -32602)
@@ -89,7 +125,7 @@ async function smokeSession(round, baseUrl) {
     if (textOf(read.output).includes("CANARY_") || textOf(find.output).includes("CANARY_"))
       throw new Error("CANARY_ leaked through a tool payload");
 
-    ok(`session ${round}: present, 5 tools, read r17, stage r18, find [P2,P3,P4]→4 matrix rows, -32602, no canary (WebMCP.enable ${s.cdpDomainEnabled ? "ok" : "rejected"} — recorded, not asserted)`);
+    ok(`session ${round}: present, 5 tools, stage pending r17, DOM confirm r18, safe find → ${rows} matrix row(s), -32602, no canary (WebMCP.enable ${s.cdpDomainEnabled ? "ok" : "rejected"} — recorded, not asserted)`);
   } finally {
     s.cdp.close();
     await s.chrome.close();
@@ -100,20 +136,41 @@ async function smokeSession(round, baseUrl) {
 async function e2e(baseUrl) {
   const s = await bootSession(baseUrl);
   const trace = [];
-  const stateHash = () => s.evalJs(`crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(JSON.stringify(window.__imw.store.snapshot())),
-  ).then((bytes) => [...new Uint8Array(bytes)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join(""))`, { awaitPromise: true });
+  const captureState = () => s.evalJs(`(async () => {
+    const snapshot = window.__imw.store.snapshot();
+    const authoritative = {
+      revision: snapshot.state.revision,
+      priority: snapshot.state.priority,
+      expressions: snapshot.state.expressions,
+      pins: snapshot.state.pins,
+    };
+    const hash = async (value) => {
+      const bytes = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(JSON.stringify(value)),
+      );
+      return [...new Uint8Array(bytes)]
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+    };
+    return {
+      snapshot,
+      stateHash: await hash(snapshot),
+      authoritativeHash: await hash(authoritative),
+    };
+  })()`, { awaitPromise: true });
   const call = async (round, toolName, input) => {
-    const stateHashBefore = await stateHash();
+    const before = await captureState();
     const t0 = Date.now();
     const r = await invokeTool(s.cdp, s.sessionId, s.frameId, toolName, input);
-    const stateHashAfter = await stateHash();
+    const after = await captureState();
     const text = textOf(r.output);
     trace.push({ round, kind: "tool", toolName, input, invocationId: r.invocationId,
-      status: r.status, matched: r.matched, stateHashBefore, stateHashAfter,
+      status: r.status, matched: r.matched,
+      stateHashBefore: before.stateHash, stateHashAfter: after.stateHash,
+      authoritativeHashBefore: before.authoritativeHash,
+      authoritativeHashAfter: after.authoritativeHash,
+      snapshotBefore: before.snapshot, snapshotAfter: after.snapshot,
       ms: Date.now() - t0, payload: text ? JSON.parse(text) : null });
     if (text?.includes("CANARY_")) throw new Error(`round ${round}: canary leak`);
     return { r, p: text ? JSON.parse(text) : null };
@@ -136,17 +193,73 @@ async function e2e(baseUrl) {
         expressionAfter: window.__imw.store.getState().expressions[${JSON.stringify(field)}],
       };
     })()`);
-    trace.push({ round, kind: "human-sim", via: "dom-change",
+    trace.push({ round, kind: "human-dom", via: "dom-change",
       action: { type: "EDIT_EXPRESSION", field, expr }, ...result });
+    return result;
+  };
+  const humanClick = async (round, selector) => {
+    const result = await s.evalJs(`(() => {
+      const button = document.querySelector(${JSON.stringify(selector)});
+      if (!button) throw new Error(${JSON.stringify(`missing ${selector}`)});
+      const renderedVersion = Number(button.dataset.version);
+      button.click();
+      const state = window.__imw.store.getState();
+      return {
+        renderedVersion,
+        revisionAfter: state.revision,
+        pendingVersionAfter: state.pending?.version ?? null,
+        pinIdsAfter: state.pins.map((pin) => pin.id),
+      };
+    })()`);
+    trace.push({ round, kind: "human-dom", via: "click", selector, ...result });
     return result;
   };
   try {
     // 1 read → r17
     const r1 = await call(1, "read_mapping_session", {});
     assertEq(r1.p.revision, 17, "round1 revision");
-    // 2 stage 3 pins → r18
+    // 2 hostile proposal renders as text and is discarded; 3 pins then confirm → r18
+    const hostile = await call(2, "stage_mapping_invariants", {
+      expectedRevision: 17,
+      invariants: [HOSTILE_PIN],
+    });
+    assertEq(hostile.p.revision, 17, "round2 hostile stage revision");
+    const hostileUi = await s.evalJs(`({
+      pwned: typeof window.__pwned,
+      text: document.querySelector("#pending-list")?.textContent ?? "",
+      imageCount: document.querySelectorAll("#pending-list img").length,
+      pinCount: window.__imw.store.getState().pins.length,
+    })`);
+    assertEq(hostileUi.pwned, "undefined", "round2 hostile value did not execute");
+    assertEq(hostileUi.text.includes(HOSTILE_PIN.group), true, "round2 hostile value visible as text");
+    assertEq(hostileUi.imageCount, 0, "round2 hostile value created no image element");
+    assertEq(hostileUi.pinCount, 0, "round2 hostile proposal not auto-confirmed");
+    await s.evalJs("window.__oldPendingConfirm = document.querySelector('#confirm-pending')");
+    const discarded = await humanClick(2, "#discard-pending");
+    assertEq(discarded.revisionAfter, 17, "round2 discard revision");
+    assertEq(discarded.pendingVersionAfter, null, "round2 discard clears pending");
+
     const r2 = await call(2, "stage_mapping_invariants", { expectedRevision: 17, invariants: PINS });
-    assertEq(r2.p.revision, 18, "round2 revision");
+    assertEq(r2.p.revision, 17, "round2 stage revision");
+    const staleConfirm = await s.evalJs(`(() => {
+      window.__oldPendingConfirm.click();
+      const state = window.__imw.store.getState();
+      return {
+        revision: state.revision,
+        pendingVersion: state.pending?.version ?? null,
+        pinCount: state.pins.length,
+        currentButtonVersion: Number(document.querySelector("#confirm-pending").dataset.version),
+        error: document.querySelector("#pending-error").textContent,
+      };
+    })()`);
+    assertEq(staleConfirm.revision, 17, "round2 stale confirm revision");
+    assertEq(staleConfirm.pendingVersion, 2, "round2 stale confirm preserves v2");
+    assertEq(staleConfirm.pinCount, 0, "round2 stale confirm applies no pins");
+    assertEq(staleConfirm.currentButtonVersion, 2, "round2 re-render keeps current version");
+    assertEq(staleConfirm.error.includes("STALE_CONFIRM"), true, "round2 stale confirm is visible");
+    const confirmed2 = await humanClick(2, "#confirm-pending");
+    assertEq(confirmed2.revisionAfter, 18, "round2 confirm revision");
+    assertEq(confirmed2.pinIdsAfter, PINS.map((pin) => pin.id), "round2 confirmed pins");
     // 3 find → witness [P2,P3,P4], evidence E1
     const r3 = await call(3, "find_mapping_counterexample", { expectedRevision: 18 });
     assertEq(r3.p.personaIds, ["P2", "P3", "P4"], "round3 witness");
@@ -197,7 +310,9 @@ async function e2e(baseUrl) {
     // 10 pin add → packet incomplete-by-coverage; unpin → green again
     const r10 = await call(10, "stage_mapping_invariants", { expectedRevision: 21, invariants: [
       ...PINS, { id: "pin-extra", type: "forbidden_group", personaCategory: "nobody", group: "nothing" }] });
-    assertEq(r10.p.revision, 22, "round10 revision");
+    assertEq(r10.p.revision, 21, "round10 staged revision");
+    const confirmed10a = await humanClick(10, "#confirm-pending");
+    assertEq(confirmed10a.revisionAfter, 22, "round10 confirmed revision");
     const e3fresh = await s.evalJs(`window.__imw.store.getState().evidence[${JSON.stringify(E3[0])}].stale`);
     assertEq(e3fresh, false, "round10 clean-sweep evidence survives an ADDED pin (fingerprint untouched)");
     const stale10a = await s.evalJs(`({
@@ -215,7 +330,9 @@ async function e2e(baseUrl) {
     assertEq(blocked10.text.includes("BLOCKED"), true, "round10 fresh blocked packet text");
     assertEq(blocked10.applyDisabled, true, "round10 fresh blocked disables apply");
     const r10c = await call(10, "stage_mapping_invariants", { expectedRevision: 22, invariants: PINS });
-    assertEq(r10c.p.revision, 23, "round10 unpin revision");
+    assertEq(r10c.p.revision, 22, "round10 replacement staged revision");
+    const confirmed10c = await humanClick(10, "#confirm-pending");
+    assertEq(confirmed10c.revisionAfter, 23, "round10 replacement confirmed revision");
     const stale10c = await s.evalJs(`({
       text: document.querySelector("#packet-state").textContent,
       applyDisabled: document.querySelector("#apply").disabled,

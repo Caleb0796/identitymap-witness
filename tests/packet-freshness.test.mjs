@@ -20,8 +20,9 @@ async function greenPacket() {
     expectedRevision: corrected.revision,
     invariants: PINS,
   });
+  store.dispatch({ type: "CONFIRM_RULES", version: staged.payload.pendingVersion });
   const found = runTool(store, personas, "find_mapping_counterexample", {
-    expectedRevision: staged.payload.revision,
+    expectedRevision: store.getState().revision,
   });
   const prepared = runTool(store, personas, "prepare_mapping_review", {
     expectedRevision: found.payload.revision,
@@ -66,11 +67,14 @@ test("every relevant edit kills a previously GREEN packet", async (t) => {
       type: "SET_PRIORITY",
       priority: ["ad", "hris"],
     })],
-    ["same-ID pin content", (store) => store.dispatch({
-      type: "PIN_INVARIANTS",
-      invariants: store.getState().pins.map((pin) =>
-        pin.id === "inv-sot" ? { ...pin, source: "ad" } : pin),
-    })],
+    ["same-ID pin content", (store) => {
+      store.dispatch({
+        type: "STAGE_RULES",
+        rules: store.getState().pins.map((pin) =>
+          pin.id === "inv-sot" ? { ...pin, source: "ad" } : pin),
+      });
+      store.dispatch({ type: "CONFIRM_RULES", version: store.getState().pending.version });
+    }],
     ["unpin", (store) => store.dispatch({ type: "UNPIN", id: "inv-null" })],
   ];
 
@@ -83,6 +87,24 @@ test("every relevant edit kills a previously GREEN packet", async (t) => {
       assert.ok(packet.evidenceIds.some((id) => store.getState().evidence[id].stale));
     });
   }
+});
+
+test("staging and discarding preserve GREEN; only confirmation invalidates it", async () => {
+  const { store, packet } = await greenPacket();
+  const proposed = store.getState().pins.map((pin) =>
+    pin.id === "inv-sot" ? { ...pin, source: "ad" } : pin);
+
+  store.dispatch({ type: "STAGE_RULES", rules: proposed });
+  assert.equal(reducer.packetFresh(packet, store.getState()), true);
+  assert.equal(store.getState().revision, packet.revision);
+  store.dispatch({ type: "DISCARD_RULES", version: store.getState().pending.version });
+  assert.equal(reducer.packetFresh(packet, store.getState()), true);
+  assert.equal(store.getState().revision, packet.revision);
+
+  store.dispatch({ type: "STAGE_RULES", rules: proposed });
+  store.dispatch({ type: "CONFIRM_RULES", version: store.getState().pending.version });
+  assert.equal(reducer.packetFresh(packet, store.getState()), false);
+  assert.ok(packet.evidenceIds.some((id) => store.getState().evidence[id].stale));
 });
 
 test("a real repair followed by fresh find and prepare recovers GREEN freshness", async () => {
@@ -120,8 +142,9 @@ test("stored pinsCovered contains only true scoped coverage, including __proto__
       { id: "uncovered", type: "source_of_truth", field: "department", source: "hris" },
     ],
   });
+  store.dispatch({ type: "CONFIRM_RULES", version: staged.payload.pendingVersion });
   const found = runTool(store, personas, "find_mapping_counterexample", {
-    expectedRevision: staged.payload.revision,
+    expectedRevision: store.getState().revision,
     invariantIds: ["__proto__"],
   });
   const prepared = runTool(store, personas, "prepare_mapping_review", {

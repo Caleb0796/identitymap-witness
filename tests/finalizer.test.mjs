@@ -64,6 +64,21 @@ test("every tool's reachable error envelopes cross the unified finalizer", async
       }),
     },
     {
+      label: "stage: PENDING_EXISTS",
+      code: "PENDING_EXISTS",
+      run: () => {
+        const store = createStore(GOLDEN_STATE);
+        runTool(store, personas, "stage_mapping_invariants", {
+          expectedRevision: 17,
+          invariants: PINS,
+        });
+        return runTool(store, personas, "stage_mapping_invariants", {
+          expectedRevision: 17,
+          invariants: [{ ...PINS[0], group: "contractors" }],
+        });
+      },
+    },
+    {
       label: "find: CANARY-bearing BAD_RULE",
       code: "BAD_RULE",
       run: () => runTool(createStore({ ...GOLDEN_STATE, pins: PINS }), personas,
@@ -162,6 +177,23 @@ test("every tool's reachable error envelopes cross the unified finalizer", async
   for (const entry of cases) {
     await t.test(entry.label, () => assertFinalEnvelope(entry.run(), entry.code));
   }
+});
+
+test("a finalized failed stage restores the pending version allocator", async () => {
+  const personas = await load("personas.json");
+  const store = createStore(GOLDEN_STATE);
+  const failed = runTool(store, personas, "stage_mapping_invariants", {
+    expectedRevision: 17,
+    invariants: [LONG_PIN],
+  });
+  assertFinalEnvelope(failed, "EVALUATOR_FAILED");
+
+  const succeeded = runTool(store, personas, "stage_mapping_invariants", {
+    expectedRevision: 17,
+    invariants: PINS,
+  });
+  assert.equal(succeeded.ok, true);
+  assert.equal(succeeded.payload.pendingVersion, 1);
 });
 
 test("caller-controlled error details are redacted or replaced as a whole", async (t) => {

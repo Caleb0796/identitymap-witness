@@ -11,7 +11,9 @@ failed tool result restores byte-identical store state, including its id allocat
 R4: invariant validation and tool schemas fail closed, empty sessions cannot turn
 green, witness caps are enforced, and annotations disclose derived-state writes
 and untrusted output; R5: review packets carry their evidence ids and become stale
-after the next relevant session edit, disabling Apply until fresh evidence is prepared.
+after the next relevant session edit, disabling Apply until fresh evidence is prepared;
+R7: agents can only stage digest-bound rule proposals, while a human must confirm
+the exact pending version before pins become authoritative and revision advances.
 
 ## 1. One line
 
@@ -82,7 +84,8 @@ state = {
     department:  'user.department',                                       // resolves through DC3's bad priority; P5 adds DC4
     email:       'user.email',                                            // clean
   },
-  pins: [],            // human pins §5 invariants during the demo — never persisted
+  pins: [],            // confirmed §5 invariants — never persisted
+  pending: null,       // agent proposal awaiting version-bound human review
   evidence: {},        // id -> {kind, revision, fingerprint, stale, payload}
   packets: {},         // id -> {evidenceIds, revision, pinsCovered, blockers}
 }
@@ -112,7 +115,11 @@ for its type plus optional `id`; resolved IDs (`id` or `pin-N`) are non-empty an
 unique. `field` is one of `displayName`, `group`, `managerId`, `department`, or
 `email`; `source` is one of `okta`, `hris`, or `ad`; all other rule values are
 non-empty strings. Extra keys, wrong value types, and any string containing the
-reserved `CANARY_` prefix fail `BAD_RULE` before pins are replaced. The checker
+reserved `CANARY_` prefix fail `BAD_RULE` before a proposal is staged. Valid rules
+are recursively canonicalized by object-key order. The pending proposal carries an
+eight-digit FNV-1a content fingerprint over that canonical JSON; this is a
+non-cryptographic display digest, never a signature, and equality is always checked
+against the canonical JSON rather than the digest. The checker
 also fails `BAD_RULE` if an invariant's referenced output field is absent, even
 though strict staging makes that state unreachable through the tool.
 
@@ -159,20 +166,25 @@ success payload includes `revision`. One text content item;
 and the list capped to fit, with `truncated:true` + `violationsTotal`; irreducibly
 over → `EVALUATOR_FAILED`). UI renders BEFORE return. Every tool has
 `untrustedContentHint:true`; only `read_mapping_session` has `readOnlyHint:true`.
-The other four use `readOnlyHint:false` because they replace pins or record
+The other four use `readOnlyHint:false` because they stage pending state or record
 derived evidence/packets. Hints are not security. No apply/save/push tool exists.
 
 **read_mapping_session** (readOnly true)
-- in: `{}` — out: `{revision, priority, fields: [{field, expr, defectFree: null}], pinIds: [string], personaCount}`
+- in: `{}` — out: `{revision, priority, fields: [{field, expr, defectFree: null}],
+  pinIds: [string], pendingRuleIds: [string], pendingVersion: integer|null, personaCount}`
   (`defectFree` is always null — the page never grades itself; the agent judges.)
 
-**stage_mapping_invariants** (readOnly false — pins only)
+**stage_mapping_invariants** (readOnly false — pending proposal only)
 - in: `{expectedRevision, invariants: [{id?, type, ...perTypeFields}]}` (1–8), with
   a strict `oneOf` schema for the three exact §5 shapes.
-- REPLACES the full pin set atomically (append semantics rejected — resubmit the
-  whole set; simplest deterministic rule). Any §5 validation failure →
-  `BAD_RULE {reason}` before dispatch. out: `{revision, pinIds}` (revision has
-  bumped by 1).
+- Dispatches `STAGE_RULES` and returns immediately without changing confirmed pins,
+  evidence, or revision. The first proposal gets a monotonically increasing pending
+  version; an identical canonical re-stage is idempotent and keeps that version.
+  A different proposal while one awaits review fails `PENDING_EXISTS` with reason
+  `different rules are already awaiting human review — the human must confirm or discard them first`.
+  Any §5 validation failure → `BAD_RULE {reason}` before dispatch. out:
+  `{revision, status:"pending_confirmation", pendingVersion, pendingRuleIds, digest,
+  nextStep:"the human must review and confirm the pending rules on the page; then call read_mapping_session"}`.
 
 **find_mapping_counterexample** (readOnly false — records evidence, no draft change)
 - in: `{expectedRevision, invariantIds: [string], maxPersonas?: integer}` where
@@ -189,10 +201,11 @@ derived evidence/packets. Hints are not security. No apply/save/push tool exists
   explicitly named every pin. A scoped clean result never clears the existing
   matrix or presents a global all-clear; only `cleanSweep && fullSweep` renders
   `clean sweep — 0 violations across {checked} personas at r{revision}`. The
-  `NO_COUNTEREXAMPLE` error code no longer exists. Unknown pin id → `BAD_RULE`.
-  Invalid `maxPersonas` → `BAD_RULE`; an effective checked pin set of zero →
-  `NO_INVARIANTS` with reason “no pinned invariants — ask the human to pin business
-  rules first” and no evidence; a minimal witness larger than `maxPersonas` →
+  result remains citable evidence. Unknown pin id → `BAD_RULE`. Invalid
+  `maxPersonas` → `BAD_RULE`; an effective checked pin set of zero →
+  `NO_INVARIANTS` and no evidence. With a pending-only proposal, its reason says
+  pending rules await human confirmation; otherwise it says “no pinned invariants —
+  ask the human to pin business rules first”. A minimal witness larger than `maxPersonas` →
   `WITNESS_EXCEEDS_CAP {witnessSize,maxPersonas}` without evidence. Engine throw
   → `EVALUATOR_FAILED`.
 
@@ -207,7 +220,8 @@ derived evidence/packets. Hints are not security. No apply/save/push tool exists
 
 **prepare_mapping_review** (readOnly false — records a packet)
 - in: `{expectedRevision, evidenceIds: [string]}`
-- With zero pinned invariants, fails `NO_INVARIANTS`; otherwise an empty
+- With zero confirmed pinned invariants, fails `NO_INVARIANTS` (including while
+  unconfirmed rules are pending); otherwise an empty
   `evidenceIds` array fails `NO_EVIDENCE`. These gates precede evidence lookup and
   packet assembly. Fails `STALE_EVIDENCE {staleIds}` if ANY referenced evidence
   is stale.
@@ -225,13 +239,19 @@ derived evidence/packets. Hints are not security. No apply/save/push tool exists
 
 ## 8. Store semantics (fingerprints, not vibes)
 
-- Mutating actions — `EDIT_EXPRESSION{field, expr}`, `SET_PRIORITY{priority}`,
-  `PIN_INVARIANTS{invariants}` (full replace), `UNPIN{id}` — bump `revision` by 1.
+- Authoritative mutations — `EDIT_EXPRESSION{field, expr}`, `SET_PRIORITY{priority}`,
+  `CONFIRM_RULES{version}` (full pin replacement), and `UNPIN{id}` — bump
+  `revision` by 1. `STAGE_RULES{rules}` sets `pending` without a revision bump;
+  `DISCARD_RULES{version}` clears it without a bump. Confirmation and discard both
+  fail `STALE_CONFIRM` unless the supplied version exactly matches the live pending
+  version. Only the human UI dispatches those two version-bound actions.
   `recordEvidence`/`recordPacket` do NOT bump (derived data).
 - Tool calls are failure-atomic: `runTool` snapshots the state and store-local id
-  allocator on entry. Every final `ok:false` restores that snapshot by rebinding
-  the state, so `revision`, `pins`, `evidence`, `packets`, and the next allocated
-  evidence or packet id are exactly as they were before the call.
+  allocator plus the store-local pending-version counter on entry. Every final
+  `ok:false` restores that complete snapshot by rebinding the state, so `revision`,
+  `pins`, `pending`, `evidence`, `packets`, and both hidden counters are exactly as
+  they were before the call. Incomplete, non-JSON, malformed-rule, digest-mismatched,
+  or derived-record/allocator-incoherent snapshots are rejected fail-closed.
 - Packet freshness is derived on every render: `packetFresh(pkt, state)` is true
   exactly when `pkt.revision === state.revision` and every id in
   `pkt.evidenceIds` exists in `state.evidence` and is not stale. Packet UI status
@@ -244,7 +264,7 @@ derived evidence/packets. Hints are not security. No apply/save/push tool exists
   it is `[field]` × all pins × named personas.
 - Invalidation: `EDIT_EXPRESSION(f)` stales evidence with `f ∈ fingerprint.fields`;
   `SET_PRIORITY` stales ALL evidence (priority feeds every resolution);
-  `PIN_INVARIANTS`/`UNPIN` stale evidence whose `fingerprint.invariants` changed
+  `CONFIRM_RULES`/`UNPIN` stale evidence whose `fingerprint.invariants` changed
   membership OR whose canonical rule CONTENT changed under an unchanged id (r3,
   run2 safety fix) — AND packet-green re-checks pin coverage regardless, so a new
   pin makes old packets incomplete-by-coverage even where evidence stays fresh.
@@ -266,18 +286,24 @@ field names, provenance source names, booleans, and non-identity value diffs.
 Page lives at REPO ROOT (`index.html`, `style.css`, `app.js` importing
 `./src/...`, fetching `./data/personas.json`) so one static publish of `.` serves
 everything (fixes the review's 404 finding; `render.yaml` publishes `.`).
-Test hook: `window.__imw = {store, render, runTool}` — the harness's "human edit"
-dispatches through it; documented as a test surface, not an API.
+Test hook: `window.__imw = {store, render, runTool}` — the harness uses it to
+inspect state while real expression changes and pending confirm/discard actions
+are driven through DOM controls; documented as a test surface, not an API.
 Components: mapping grid (field / editable expr / provenance chip), priority
-select, invariant chips, counterexample matrix (persona × invariant), provenance
-rail (candidates chain, losing sources visible), packet panel with blockers +
+select, confirmed invariant chips, a pending-rules region showing every canonical
+field plus version and non-cryptographic digest, version-bound Confirm all/Discard
+buttons, counterexample matrix (persona × invariant), provenance rail (candidates
+chain, losing sources visible), packet panel with blockers +
 stale watermark, revision badge, Apply disabled-unless-green and never used.
+All rule-controlled pending, confirmed-pin, and matrix text is built with
+`createElement` and `textContent`, never HTML parsing.
 
 ## 11. Demo beats (single direction, updated to golden walk)
 
-30s: 0–6s P1 all green → 7–14s human pins 3 invariants; agent returns witness
-{P2,P3,P4} with provenance → 15–22s human fixes `managerId` expr in the UI
-(r17→r18) → 23–27s stale packet REJECTED (`STALE_EVIDENCE`) → 28–30s re-find +
+30s: 0–6s P1 all green → 7–14s agent stages 3 invariants at r17 and the human
+reviews/Confirms all (r18); agent returns witness {P2,P3,P4} with provenance →
+15–22s human fixes `managerId` expr in the UI (r18→r19) → 23–27s stale packet
+REJECTED (`STALE_EVIDENCE`) → 28–30s re-find +
 packet green; Apply untouched. 3min: pain 20s → dirty draft tour 25s → five-tool
 loop 55s → ablation + protocol-E2E receipts 40s → stale/PII guards 25s → limits
 (concessions #1/#2, designed-not-run arms) 15s.

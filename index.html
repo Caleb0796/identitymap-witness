@@ -29,6 +29,13 @@
       <h2>Pinned invariants</h2>
       <ul id="pins"><li class="hint">none pinned yet — the human states these; the agent stages them</li></ul>
     </section>
+    <section id="pending-rules" class="card" aria-live="polite" hidden>
+      <h2>Pending rules (agent-staged — not yet in force)</h2>
+      <div id="pending-meta" class="hint"></div>
+      <div id="pending-list"></div>
+      <div id="pending-error" class="stale-banner" hidden></div>
+      <div id="pending-actions"></div>
+    </section>
     <section id="witness" class="card">
       <h2>Counterexample matrix</h2>
       <div id="stale-banner" class="stale-banner" hidden>STALE — the draft changed after this evidence was computed; the packet below will refuse it</div>

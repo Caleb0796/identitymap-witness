@@ -14,6 +14,11 @@ const PINS = [
   { id: "inv-sot", type: "source_of_truth", field: "department", source: "hris" },
 ];
 
+function confirmRules(store, rules) {
+  store.dispatch({ type: "STAGE_RULES", rules });
+  store.dispatch({ type: "CONFIRM_RULES", version: store.getState().pending.version });
+}
+
 test("fingerprint invalidation table", () => {
   const s = createStore(GOLDEN_STATE);
   const find = s.recordEvidence("counterexample",
@@ -33,10 +38,10 @@ test("fingerprint invalidation table", () => {
 
 test("pin membership change stales evidence whose invariant set changed", () => {
   const s = createStore(GOLDEN_STATE);
-  s.dispatch({ type: "PIN_INVARIANTS", invariants: PINS });
+  confirmRules(s, PINS);
   const e = s.recordEvidence("counterexample",
     { fields: ["group"], invariants: PIN_IDS, personas: ALL8 }, {});
-  s.dispatch({ type: "PIN_INVARIANTS", invariants: PINS.slice(0, 2) }); // inv-sot dropped
+  confirmRules(s, PINS.slice(0, 2)); // inv-sot dropped
   assert.equal(s.getState().evidence[e].stale, true);
 });
 
@@ -53,7 +58,7 @@ test("every mutating action bumps exactly once", () => {
   const r0 = s.getState().revision;
   s.dispatch({ type: "EDIT_EXPRESSION", field: "email", expr: "user.email" });
   s.dispatch({ type: "SET_PRIORITY", priority: ["hris", "ad"] });
-  s.dispatch({ type: "PIN_INVARIANTS", invariants: PINS });
+  confirmRules(s, PINS);
   s.dispatch({ type: "UNPIN", id: "inv-sot" });
   assert.equal(s.getState().revision, r0 + 4);
   assert.equal(s.getState().pins.length, 2);
@@ -78,11 +83,11 @@ test("clean-to-violating edit is caught: stale old evidence, fresh find sees it"
 
 test("SAFETY: same-ID pin CONTENT replacement stales dependent evidence (run2 finding)", () => {
   const s = createStore(GOLDEN_STATE);
-  s.dispatch({ type: "PIN_INVARIANTS", invariants: PINS });
+  confirmRules(s, PINS);
   const e = s.recordEvidence("clean-sweep",
     { fields: Object.keys(GOLDEN_STATE.expressions), invariants: PIN_IDS, personas: ALL8 }, { violations: [] });
   const swapped = PINS.map((p) => p.id === "inv-sot" ? { ...p, source: "ad" } : p); // same ids, different rule
-  s.dispatch({ type: "PIN_INVARIANTS", invariants: swapped });
+  confirmRules(s, swapped);
   assert.equal(s.getState().evidence[e].stale, true,
     "rule content changed under an unchanged id — old evidence must die");
 });

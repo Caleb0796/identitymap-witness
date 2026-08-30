@@ -11,8 +11,14 @@ const PINS = [
   { id: "inv-sot", type: "source_of_truth", field: "department", source: "hris" },
 ];
 const golden = async () => ({ store: createStore(GOLDEN_STATE), personas: await load("personas.json") });
-const stagePins = (store, personas) =>
-  runTool(store, personas, "stage_mapping_invariants", { expectedRevision: store.getState().revision, invariants: PINS });
+const stagePins = (store, personas) => {
+  const staged = runTool(store, personas, "stage_mapping_invariants", {
+    expectedRevision: store.getState().revision,
+    invariants: PINS,
+  });
+  if (staged.ok) store.dispatch({ type: "CONFIRM_RULES", version: staged.payload.pendingVersion });
+  return staged;
+};
 
 test("happy path: read → stage → find → preview → prepare", async () => {
   const { store, personas } = await golden();
@@ -25,8 +31,9 @@ test("happy path: read → stage → find → preview → prepare", async () => 
 
   const stage = stagePins(store, personas);
   assert.ok(stage.ok);
-  assert.equal(stage.payload.revision, 18);
-  assert.deepEqual(stage.payload.pinIds, ["inv-forbid", "inv-null", "inv-sot"]);
+  assert.equal(stage.payload.revision, 17);
+  assert.deepEqual(stage.payload.pendingRuleIds, ["inv-forbid", "inv-null", "inv-sot"]);
+  assert.equal(store.getState().revision, 18);
 
   const find = runTool(store, personas, "find_mapping_counterexample", { expectedRevision: 18 });
   assert.ok(find.ok);
@@ -80,7 +87,9 @@ test("BAD_RULE: unknown type, missing field, unknown invariantId; pin replace no
 
   r = runTool(store, personas, "stage_mapping_invariants",
     { expectedRevision: 18, invariants: [PINS[0]] }); // full replace
-  assert.deepEqual(r.payload.pinIds, ["inv-forbid"]);
+  assert.deepEqual(r.payload.pendingRuleIds, ["inv-forbid"]);
+  store.dispatch({ type: "CONFIRM_RULES", version: r.payload.pendingVersion });
+  assert.deepEqual(store.getState().pins.map((pin) => pin.id), ["inv-forbid"]);
 });
 
 test("a clean snapshot returns successful closing evidence", async () => {
@@ -89,8 +98,9 @@ test("a clean snapshot returns successful closing evidence", async () => {
   const store = createStore(snapshot);
   const stage = runTool(store, personas, "stage_mapping_invariants",
     { expectedRevision: snapshot.revision, invariants: PINS });
+  store.dispatch({ type: "CONFIRM_RULES", version: stage.payload.pendingVersion });
   const r = runTool(store, personas, "find_mapping_counterexample",
-    { expectedRevision: stage.payload.revision });
+    { expectedRevision: store.getState().revision });
   assert.equal(r.ok, true);
   assert.equal(r.payload.cleanSweep, true);
   assert.equal(r.payload.fullSweep, true);
@@ -137,7 +147,8 @@ test("payload budget: oversized violation lists shrink to ids with truncated:tru
   const pins = Array.from({ length: 6 }, (_, i) => (
     { id: `fb-${i}`, type: "forbidden_group", personaCategory: "contractor", group: "employees" }));
   const store = createStore({ revision: 1, priority: ["hris", "ad"], expressions: GOLDEN_STATE.expressions, pins: [] });
-  runTool(store, personas, "stage_mapping_invariants", { expectedRevision: 1, invariants: pins });
+  const staged = runTool(store, personas, "stage_mapping_invariants", { expectedRevision: 1, invariants: pins });
+  store.dispatch({ type: "CONFIRM_RULES", version: staged.payload.pendingVersion });
   const r = runTool(store, personas, "find_mapping_counterexample", { expectedRevision: 2 });
   assert.ok(r.ok);
   assert.equal(r.payload.truncated, true);

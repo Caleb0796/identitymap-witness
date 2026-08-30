@@ -1,10 +1,11 @@
-# IdentityMap Witness — EVAL & TEST protocol (r2, post-review)
+# IdentityMap Witness — EVAL & TEST protocol (r4, two-phase authority)
 
-Companion to `SPEC.md` r2. Numbers reported anywhere come from command output in the
-same session (D-38). Raw traces under `eval/out/`, committed. r2 changes after the
-sol review: direction cut; arm relabeling (no "three-arm benchmark" headline); K1
-demoted from kill line to stated expectation; machine-readable scorer required;
-executable gates; audited-oracle gate wired into the report.
+Companion to `SPEC.md` r4. Numbers reported anywhere come from command output in the
+same session (D-38). Relay traces and `report.json` under `eval/out/` are fresh-run
+generated artifacts and are git-ignored; only `.gitkeep` is tracked. r4 retains the
+post-review direction cut and honest ablation labels, and adds failure-atomic tools,
+strict validation, packet freshness, explicit trace/HEAD binding, digest-bound human
+confirmation, and a four-hash per-call write oracle.
 
 ## What the evaluation claims — and refuses to claim
 
@@ -26,9 +27,11 @@ executable gates; audited-oracle gate wired into the report.
 | evaluator | priority resolution, present-but-empty wins (DC4), null poisons concat, `""` vs null equality table, ternary branch capture |
 | provenance | candidates chain lists every consulted source; P4 case names losing `hris` candidate explicitly |
 | invariants | 3 types × pass/violate; checker case-insensitive where SPEC §5 says so (DC1 asymmetry test) |
-| witness | finds all 4 seeded violations; exhaustive minimal set == oracle (size 3, both valid sets accepted); deterministic tie-break; single-invariant → size 1; clean draft → NO_COUNTEREXAMPLE path at tool layer |
-| store | mutations bump revision exactly once; recordEvidence/recordPacket do NOT bump; fingerprint invalidation table: EDIT_EXPRESSION stales find-evidence + only matching preview-evidence; SET_PRIORITY stales all; pin changes flip packet coverage; **clean→violating**: edit a clean field into a violating expr → old evidence stale AND re-find catches the new violation |
-| tools | all 5 happy paths against golden state; EVERY error code in SPEC §7 provoked (incl. NO_COUNTEREXAMPLE as error, BAD_RULE on unknown pin, INVALID_AST position, UNKNOWN_PERSONA, STALE_EVIDENCE staleIds, PII_GUARD); ≤1500 budget at the cap with truncation path; REVISION_MISMATCH carries currentRevision; pin replace-not-append |
+| witness | finds all 4 seeded violations; exhaustive minimal set == oracle (size 3, both valid sets accepted); deterministic tie-break; single-invariant → size 1; clean draft → successful citable clean sweep |
+| store | `STAGE_RULES`/`DISCARD_RULES` do not bump revision; version-bound `CONFIRM_RULES` replaces pins and bumps once; stale/double confirms fail; canonical-content pin changes preserve exact invalidation; complete snapshots include both hidden allocators and reject missing counters; recordEvidence/recordPacket do NOT bump |
+| tools | all 5 happy paths; stage returns pending immediately and never moves pins; read exposes pending ids/version; pending-only find/prepare fail `NO_INVARIANTS`; validation and revision/pending precedence fail closed; every reachable error (including `PENDING_EXISTS`) is failure-atomic; ≤1500 budget, redaction, witness cap, and fencing envelopes are asserted |
+| confirmation/UI | canonical-key-order digest stability plus deliberate FNV-1a collision proves equality is canonical JSON, not digest; hostile rule group/id render through `textContent`; discarded v1 control cannot confirm v2; confirmed hostile id survives find as exact text with no HTML execution |
+| eval oracle | raw snapshot sections, derived-record ids, and hidden counters are own/type/coherence checked; browser SHA-256 values are recomputed; complete per-tool success/error envelopes are required; missing/fake hashes, extra state, modified old evidence, wrong returned ids, unknown tools, and allocator over/under-increments fail closed |
 | redaction | canary sweep over every tool × every persona × keys AND values AND candidates AND diffs; crafted leak in a payload KEY caught; `<redacted:changed>` on identity diffs |
 
 Gate: exit 0, 0 fail, 0 skip. Target ≥ 70 tests.
@@ -38,28 +41,38 @@ Gate: exit 0, 0 fail, 0 skip. Target ≥ 70 tests.
 `node harness/relay.mjs --smoke` (launcher/CDP client built in plan T2, patterns
 retyped from outpocket, nothing imported):
 presence via completed round trip (C7), `(await getTools()).length === 5` (C6),
-one invokeTool Completed with DOM matrix updated before response, one -32602
+stage pending at r17 → real DOM Confirm all → r18 → one find Completed with the
+DOM matrix updated before response, one -32602
 unknown-name send rejection, **repeated cold sessions ×3 with fresh user-data-dir
-and cleanup** (review finding: single-shot smoke hid launch flakiness).
+and cleanup**. One cold session confirms a hostile invariant id, waits an event-loop
+tick, and asserts exact pin/matrix text, zero injected images, and no handler execution.
 Gate: exit 0.
 
 ## Layer 3 — protocol E2E relay (scripted; labeled protocol, not agent)
 
 `node harness/relay.mjs --e2e`, one browser session, rounds:
 1. read_mapping_session → r17
-2. stage_mapping_invariants(3 pins) → r18
-3. find_mapping_counterexample → witness {P2,P3,P4|P5}, evidence recorded
+2. stage a hostile-HTML group at r17, assert visible text/no execution/no pins,
+   retain the v1 Confirm control, then real-DOM Discard; stage 3 rules as pending v2
+   at r17; clicking the detached v1 control yields visible `STALE_CONFIRM` and
+   leaves v2 untouched; real-DOM Confirm all → r18
+3. find_mapping_counterexample → witness {P2,P3,P4}, evidence recorded
 4. HUMAN-SIM: `window.__imw.store.dispatch(EDIT_EXPRESSION managerId fix)` via
    Runtime.evaluate → r19; assert find-evidence stale
 5. prepare_mapping_review(old ids) → MUST fail STALE_EVIDENCE
 6. re-find → fresh evidence; violations no longer include P3/inv-null
 7. preview_mapping_patch on `group` fix over {P2} → diff redacted-clean
-8. HUMAN-SIM applies group fix + priority fix → re-find → NO_COUNTEREXAMPLE error
-   carrying a fresh clean-sweep evidence id → prepare over THAT id → packet `blockers:[]`
+8. HUMAN-SIM applies group fix + priority fix → r21; re-find returns a successful
+   full clean sweep carrying a fresh evidence id → prepare over that id → packet `blockers:[]`
 9. recovery: wrong expectedRevision → REVISION_MISMATCH → corrected retry succeeds
-10. pin add mid-session: PIN_INVARIANTS with a 4th trivial pin → old packet
-    incomplete-by-coverage (blocker `uncovered`), then unpin restores
-Trace with every invocationId/status/payload/ms → `eval/out/relay-<sha>.json`.
+10. stage a 4th trivial rule at r21 → real-DOM Confirm all → r22; old packet is
+    incomplete-by-coverage (blocker `uncovered`); stage the original 3 at r22 →
+    real-DOM Confirm all → r23; fresh prepare is green
+11. real grid change breaks managerId (r24), then a real grid repair (r25); fresh
+    find + prepare restores a green packet
+Trace records every invocationId/status/payload/ms plus `snapshotBefore/After`,
+full-state SHA-256 before/after, and authoritative-slice SHA-256 before/after →
+`eval/out/relay-<sha>.json`.
 Gate: exit 0 AND rounds 5, 9, 10 each show their failure/recovery pair.
 
 ## Scorer + ablation (honest labels replace the old "3-arm benchmark")
@@ -83,7 +96,17 @@ finding: a formula is not an observed arm).
 Browser-Use / Full-CDP: designs remain in this file's git history; they are
 DESIGNED-NOT-RUN and appear in README + video limitations, never in claims.
 
-`eval/run.mjs`: layer gates → scorer → ablation → `eval/out/report.json`
+`eval/run.mjs`: layer gates → scorer → ablation → final per-call write oracle →
+`eval/out/report.json`. The oracle re-hashes both raw snapshots in Node and requires:
+all failed calls leave the complete snapshot byte-identical; every tool leaves
+`{revision,priority,expressions,pins}` unchanged; successful stage changes only
+`pending` and advances the hidden pending-version counter by exactly one (or zero
+for an identical re-stage); successful find/preview add exactly the returned
+evidence id and advance shared `nextId` by one; successful prepare does the same
+for its returned packet id; read changes nothing. All unrelated sections and
+hidden counters must remain exact.
+
+Report shape:
 `{layers, scorer: {classes, witness}, ablation, oracleAudited, killLines}`;
 **refuses (exit 2) to write an un-watermarked report while `oracle.audited` is
 false** — flipping it requires the human audit commit (trailer `Oracle-Audited: yes`);
@@ -93,9 +116,9 @@ string stays false in loop commits — commit author check).
 ## Pass thresholds (pre-registered)
 
 ALL of: scorer 4/4 classes; false positives ≤ 1; witness size == 3 matching an
-oracle set; stale mutations = 0; unauthorized-write count = 0 (no tool ever
-dispatches a draft mutation — asserted by store instrumentation in the relay);
-PII canary leaks = 0; layer gates all exit 0; report watermark `oracleAudited: true`.
+oracle set; four-hash write-oracle failures = 0; failed-call full-state hash
+failures = 0; PII canary leaks = 0; layer gates all exit 0; report watermark
+`oracleAudited: true`.
 
 ## Kill / abort gates (all executable — a script can evaluate each)
 
@@ -112,7 +135,7 @@ PII canary leaks = 0; layer gates all exit 0; report watermark `oracleAudited: t
 
 ## Evidence pack for submission
 
-report.json + relay traces; ChatGPT-browser human run (PNG + transcribed JSON,
+fresh generated report.json + relay trace; ChatGPT-browser human run (PNG + transcribed JSON,
 V1-style) **including the remote stale/recovery beat** (round-5 equivalent done
 live — review finding); deployed URL; public repo (MIT) flipped only at freeze;
 video <3min, audio, remote origin, consent gate visible, first 10–15s = result.

@@ -17,13 +17,16 @@ export const GOLDEN_STATE = {
     email: "user.email",
   },
   pins: [],
+  pending: null,
 };
 
 const failure = (code, extra = {}) => ({ ok: false, error: { code, ...extra } });
 const mismatch = (s) => failure("REVISION_MISMATCH", { currentRevision: s.revision });
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
-const noInvariants = () => failure("NO_INVARIANTS", {
-  reason: "no pinned invariants — ask the human to pin business rules first",
+const noInvariants = (s) => failure("NO_INVARIANTS", {
+  reason: s.pending
+    ? "no confirmed invariants — pending rules await confirmation by the human"
+    : "no pinned invariants — ask the human to pin business rules first",
 });
 
 const HANDLERS = {
@@ -34,6 +37,8 @@ const HANDLERS = {
       priority: s.priority,
       fields: Object.entries(s.expressions).map(([field, expr]) => ({ field, expr, defectFree: null })),
       pinIds: s.pins.map((p) => p.id),
+      pendingRuleIds: s.pending?.rules.map((rule) => rule.id) ?? [],
+      pendingVersion: s.pending?.version ?? null,
       personaCount: personas.length,
     } };
   },
@@ -42,9 +47,16 @@ const HANDLERS = {
     const s = store.getState();
     if (args.expectedRevision !== s.revision) return mismatch(s);
     const withIds = validateInvariants(args.invariants);
-    store.dispatch({ type: "PIN_INVARIANTS", invariants: withIds }); // full replace, bumps
+    store.dispatch({ type: "STAGE_RULES", rules: withIds });
     const after = store.getState();
-    return { ok: true, payload: { revision: after.revision, pinIds: after.pins.map((p) => p.id) } };
+    return { ok: true, payload: {
+      revision: after.revision,
+      status: "pending_confirmation",
+      pendingVersion: after.pending.version,
+      pendingRuleIds: after.pending.rules.map((rule) => rule.id),
+      digest: after.pending.digest,
+      nextStep: "the human must review and confirm the pending rules on the page; then call read_mapping_session",
+    } };
   },
 
   find_mapping_counterexample(store, personas, args) {
@@ -58,7 +70,7 @@ const HANDLERS = {
         return failure("BAD_RULE", { reason: `unknown invariant id ${id}` });
       pins = s.pins.filter((p) => args.invariantIds.includes(p.id));
     }
-    if (pins.length === 0) return noInvariants();
+    if (pins.length === 0) return noInvariants(s);
     const checkedInvariantIds = pins.map((p) => p.id);
     const confirmedInvariantIds = new Set(s.pins.map((p) => p.id));
     const checkedInvariantSet = new Set(checkedInvariantIds);
@@ -138,7 +150,7 @@ const HANDLERS = {
   prepare_mapping_review(store, _personas, args) {
     const s = store.getState();
     if (args.expectedRevision !== s.revision) return mismatch(s);
-    if (s.pins.length === 0) return noInvariants();
+    if (s.pins.length === 0) return noInvariants(s);
     const ids = args.evidenceIds ?? [];
     if (ids.length === 0) return failure("NO_EVIDENCE");
     const staleIds = ids.filter((id) => !hasOwn(s.evidence, id) || s.evidence[id].stale);
@@ -172,11 +184,11 @@ const HANDLERS = {
 
 export const TOOLS = [
   { name: "read_mapping_session",
-    description: "Report the current UNSAVED mapping session: revision, source priority order, per-field draft expressions, pinned invariant ids, persona pool size. Read-only; values are redacted of personal data.",
+    description: "Report the current UNSAVED mapping session: revision, source priority order, per-field draft expressions, confirmed and pending invariant ids, pending version, persona pool size. Read-only; values are redacted of personal data.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, untrustedContentHint: true } },
   { name: "stage_mapping_invariants",
-    description: "Replace the full set of human business invariants pinned to this drafting session (never persisted). Requires expectedRevision; bumps the session revision.",
+    description: "Stage a full proposed set of business invariants for visible human review (never persisted). Requires expectedRevision; returns immediately without changing confirmed pins or revision.",
     inputSchema: { type: "object", properties: {
       expectedRevision: { type: "integer", minimum: 0 },
       invariants: { type: "array", minItems: 1, maxItems: 8, items: { oneOf: [

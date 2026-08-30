@@ -17,7 +17,12 @@ const LONG_PIN = {
   personaCategory: "contractor",
   group: "employees",
 };
-const stateText = (store) => JSON.stringify(store.getState());
+const stateText = (store) => JSON.stringify(store.snapshot());
+
+function confirmRules(store, rules) {
+  store.dispatch({ type: "STAGE_RULES", rules });
+  store.dispatch({ type: "CONFIRM_RULES", version: store.getState().pending.version });
+}
 
 function assertFailedAtomically(store, personas, name, args, code) {
   const before = stateText(store);
@@ -62,6 +67,24 @@ test("every reachable failed tool result leaves the store byte-identical", async
       expectedRevision: 17,
       invariants: [LONG_PIN],
     }, "EVALUATOR_FAILED");
+    const next = runTool(store, personas, "stage_mapping_invariants", {
+      expectedRevision: 17,
+      invariants: PINS,
+    });
+    assert.equal(next.payload.pendingVersion, 1);
+  });
+
+  await t.test("stage: PENDING_EXISTS", () => {
+    const store = createStore(GOLDEN_STATE);
+    const staged = runTool(store, personas, "stage_mapping_invariants", {
+      expectedRevision: 17,
+      invariants: PINS,
+    });
+    assert.equal(staged.ok, true);
+    assertFailedAtomically(store, personas, "stage_mapping_invariants", {
+      expectedRevision: 17,
+      invariants: [{ ...PINS[0], group: "contractors" }],
+    }, "PENDING_EXISTS");
   });
 
   await t.test("find: BAD_RULE", () => {
@@ -199,7 +222,7 @@ test("restore rebinds getState to the snapshotted state", () => {
   const before = stateText(store);
   const priorReference = store.getState();
   const snap = store.snapshot();
-  store.dispatch({ type: "PIN_INVARIANTS", invariants: PINS });
+  confirmRules(store, PINS);
   store.restore(snap);
 
   assert.notEqual(store.getState(), priorReference);
@@ -217,7 +240,7 @@ test("rollback restores the store-local evidence id allocator", async () => {
 
   const controlStore = createStore({ ...GOLDEN_STATE, pins: [LONG_PIN] });
   for (const store of [failedStore, controlStore]) {
-    store.dispatch({ type: "PIN_INVARIANTS", invariants: PINS });
+    confirmRules(store, PINS);
   }
 
   const afterFailure = runTool(failedStore, personas, "find_mapping_counterexample", {

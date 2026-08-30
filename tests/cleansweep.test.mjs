@@ -11,19 +11,22 @@ const PINS = [
   { id: "inv-sot", type: "source_of_truth", field: "department", source: "hris" },
 ];
 
-const stage = (store, personas) => runTool(store, personas, "stage_mapping_invariants", {
-  expectedRevision: store.getState().revision,
-  invariants: PINS,
-});
+const stage = (store, personas) => {
+  const staged = runTool(store, personas, "stage_mapping_invariants", {
+    expectedRevision: store.getState().revision,
+    invariants: PINS,
+  });
+  store.dispatch({ type: "CONFIRM_RULES", version: staged.payload.pendingVersion });
+};
 
 test("a clean full sweep is successful, citable closing evidence", async () => {
   const personas = await load("personas.json");
   const corrected = await load("persisted-snapshot.json");
   const store = createStore(corrected);
-  const staged = stage(store, personas);
+  stage(store, personas);
 
   const result = runTool(store, personas, "find_mapping_counterexample", {
-    expectedRevision: staged.payload.revision,
+    expectedRevision: store.getState().revision,
   });
 
   assert.equal(result.ok, true);
@@ -43,10 +46,10 @@ test("a clean full sweep is successful, citable closing evidence", async () => {
 test("a counterexample result identifies the checked scope", async () => {
   const personas = await load("personas.json");
   const store = createStore(GOLDEN_STATE);
-  const staged = stage(store, personas);
+  stage(store, personas);
 
   const result = runTool(store, personas, "find_mapping_counterexample", {
-    expectedRevision: staged.payload.revision,
+    expectedRevision: store.getState().revision,
   });
 
   assert.equal(result.ok, true);

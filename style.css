@@ -30,6 +30,13 @@ td input:focus { outline: 2px solid #1459d9; border-color: transparent; }
 .pin-chip button:hover { color: #aa3434; }
 #pins { list-style: none; margin: 0; padding: 0; }
 #pins li { display: inline; }
+.pending-rule { margin: .55rem 0; padding: .6rem .7rem; border: 1px solid #e2dccd; border-radius: 7px; background: #faf7ef; }
+.pending-rule dl { display: grid; grid-template-columns: minmax(8rem, auto) 1fr; gap: .2rem .7rem; margin: 0; }
+.pending-rule dt { color: #5b6672; font: 600 .7rem/1.5 ui-monospace, monospace; }
+.pending-rule dd { margin: 0; overflow-wrap: anywhere; font: .78rem/1.5 ui-monospace, monospace; }
+#pending-actions { display: flex; gap: .5rem; margin-top: .7rem; }
+#pending-actions button { padding: .4rem .8rem; border: 1px solid #cfc9bb; border-radius: 7px; background: #f1ede2; font: 600 .8rem/1.4 inherit; cursor: pointer; }
+#confirm-pending { color: #fff; background: #08795e !important; border-color: #08795e !important; }
 #rail { font-size: .8rem; }
 #rail .rail-head { font: 600 .8rem/1.6 ui-monospace, monospace; margin-bottom: .35rem; }
 #rail table { margin-top: .3rem; }

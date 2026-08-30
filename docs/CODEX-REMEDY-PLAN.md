@@ -392,17 +392,22 @@ the authoritative slice `{revision, priority, expressions, pins}`, before and af
 - `ok:false` → full state unchanged (already in R6).
 - ANY tool, any outcome → authoritative slice unchanged and revision unchanged
   (post-R7, no tool ever moves them — only humans do).
-- ok `stage` → full-state delta confined to `pending`.
+- ok `stage` → visible-state delta confined to `pending`; the snapshot-included
+  pending-version counter advances exactly 1 for a new proposal and 0 for an
+  identical re-stage; shared `nextId` stays unchanged.
 - ok `find`/`preview` → delta confined to `evidence`, and the new evidence keys are
-  exactly the returned `evidenceIds`/`evidenceId`.
-- ok `prepare` → delta confined to `packets`, new key = returned `packetId`.
-- ok `read` → full state unchanged.
+  exactly the returned `evidenceIds`/`evidenceId`; shared `nextId` advances exactly 1.
+- ok `prepare` → delta confined to `packets`, new key = returned `packetId`, and
+  shared `nextId` advances exactly 1.
+- ok `read` → complete snapshot, including both hidden counters, unchanged.
 
 Implement by having relay capture the four hashes plus (for the delta-confinement
-checks) the JSON of each section — sections are small; reuse the 1,500-char-safe
-store directly via `Runtime.evaluate` returning the state object.
+checks) the complete snapshot JSON, including `nextId` and the pending-version
+counter — sections are small; reuse the 1,500-char-safe store directly via
+`Runtime.evaluate` returning the state object. `run.mjs` independently recomputes
+all four SHA-256 values and fail-closes malformed raw sections.
 
-- [ ] Step 1: failing unit tests `tests/confirm-flow.test.mjs`: stage → pins/revision
+- [x] Step 1: failing unit tests `tests/confirm-flow.test.mjs`: stage → pins/revision
       unchanged, pending set with version+digest, digest stable across key order;
       find before confirm → NO_INVARIANTS; CONFIRM_RULES with the right version →
       pins live, revision +1, prior evidence staled per canonical-content rule;
@@ -410,18 +415,19 @@ store directly via `Runtime.evaluate` returning the state object.
       **non-identical re-stage while pending → PENDING_EXISTS, pending unchanged**;
       identical re-stage → idempotent, same version; discard → cleared, no bump;
       **confirm after discard → STALE_CONFIRM**; double-confirm (same version
-      twice) → second is STALE_CONFIRM.
-- [ ] Step 2: failing native test (extend e2e): a hostile-HTML rule value — stage
+      twice) → second is STALE_CONFIRM. A deliberate equal-FNV/different-canonical
+      pair proves pending equality never relies on the display digest.
+- [x] Step 2: failing native test (extend e2e): a hostile-HTML rule value — stage
       `{type:"forbidden_group", personaCategory:"x", group:"<img src=x onerror=window.__pwned=1>"}`
       — assert `window.__pwned === undefined`, the value renders as visible TEXT in
       the pending card, and nothing auto-confirmed (pins still empty). Then discard it.
-- [ ] Step 3: implement store + tools + UI + harness + eval oracle together; migrate
+- [x] Step 3: implement store + tools + UI + harness + eval oracle together; migrate
       `tests/tools.test.mjs` stage helpers and every reducer `PIN_INVARIANTS`
       assertion; update `eval/run.mjs`'s `human-sim` handling to the R9 `human-dom`
       kind. `npm test`, smoke, e2e, `node eval/run.mjs` ALL green before committing.
-- [ ] Step 4: SPEC §5/§7/§8 r4. Single commit
+- [x] Step 4: SPEC §5/§7/§8 r4. Single commit
       `remedy: two-phase invariant authority — digest-bound human confirmation (R7)`.
-- [ ] Step 5: append to `docs/EVIDENCE-CHECKLIST.md`: "ChatGPT-browser evidence must
+- [x] Step 5: append to `docs/EVIDENCE-CHECKLIST.md`: "ChatGPT-browser evidence must
       be RE-CAPTURED after the confirm-flow deploy (old PNG/JSON show the direct-pin
       flow); capture during the 09-01 human eval runs (R13 protocol)."
 

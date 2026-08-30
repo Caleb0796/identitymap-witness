@@ -5,7 +5,7 @@ import { evaluateAll } from "./src/engine/witness.mjs";
 
 const personas = await fetch("./data/personas.json").then((r) => r.json());
 const store = createStore(GOLDEN_STATE);
-const ui = { lastFind: null, lastSweep: null, lastPacket: null, selected: null };
+const ui = { lastFind: null, lastSweep: null, lastPacket: null, selected: null, pendingError: null };
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) => String(v).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
@@ -15,6 +15,66 @@ allClear.id = "all-clear";
 allClear.className = "hint";
 allClear.hidden = true;
 $("#matrix").before(allClear);
+
+function renderPending(s) {
+  const section = $("#pending-rules");
+  const meta = $("#pending-meta");
+  const list = $("#pending-list");
+  const actions = $("#pending-actions");
+  const error = $("#pending-error");
+  list.replaceChildren();
+  actions.replaceChildren();
+
+  if (!s.pending) {
+    section.hidden = true;
+    meta.textContent = "";
+    error.hidden = true;
+    error.textContent = "";
+    return;
+  }
+
+  section.hidden = false;
+  meta.textContent = `version ${s.pending.version} · content fingerprint ${s.pending.digest} (FNV-1a, non-cryptographic)`;
+  for (const rule of s.pending.rules) {
+    const card = document.createElement("article");
+    card.className = "pending-rule";
+    const fields = document.createElement("dl");
+    for (const [key, value] of Object.entries(rule)) {
+      const name = document.createElement("dt");
+      name.textContent = key;
+      const content = document.createElement("dd");
+      content.textContent = typeof value === "string" ? value : JSON.stringify(value);
+      fields.append(name, content);
+    }
+    card.append(fields);
+    list.append(card);
+  }
+
+  error.hidden = !ui.pendingError;
+  error.textContent = ui.pendingError ?? "";
+  for (const [id, label, type] of [
+    ["confirm-pending", "Confirm all", "CONFIRM_RULES"],
+    ["discard-pending", "Discard", "DISCARD_RULES"],
+  ]) {
+    const button = document.createElement("button");
+    button.id = id;
+    button.type = "button";
+    button.dataset.version = String(s.pending.version);
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      try {
+        store.dispatch({ type, version: Number(button.dataset.version) });
+        ui.pendingError = null;
+      } catch (caught) {
+        ui.pendingError = caught?.code === "STALE_CONFIRM"
+          ? "STALE_CONFIRM — pending rules changed; review the current proposal"
+          : String(caught?.message ?? caught);
+      }
+      render();
+    });
+    actions.append(button);
+  }
+}
 
 function renderRail(outs) {
   const sel = ui.selected;
@@ -64,12 +124,35 @@ function render() {
     });
   }
 
-  $("#pins").innerHTML = s.pins.length
-    ? s.pins.map((p) => `<li><span class="pin-chip"><code>${esc(p.id)}</code> ${esc(p.type)}<button data-unpin="${esc(p.id)}" title="unpin">✕</button></span></li>`).join("")
-    : '<li class="hint">none pinned yet — the human states these; the agent stages them</li>';
+  const pins = $("#pins");
+  pins.replaceChildren();
+  if (s.pins.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "hint";
+    empty.textContent = "none pinned yet — the human states these; the agent stages them";
+    pins.append(empty);
+  } else {
+    for (const pin of s.pins) {
+      const item = document.createElement("li");
+      const chip = document.createElement("span");
+      chip.className = "pin-chip";
+      const id = document.createElement("code");
+      id.textContent = pin.id;
+      const type = document.createTextNode(` ${pin.type}`);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.dataset.unpin = pin.id;
+      remove.title = "unpin";
+      remove.textContent = "✕";
+      chip.append(id, type, remove);
+      item.append(chip);
+      pins.append(item);
+    }
+  }
   for (const b of document.querySelectorAll("#pins [data-unpin]")) {
     b.addEventListener("click", () => { store.dispatch({ type: "UNPIN", id: b.dataset.unpin }); render(); });
   }
+  renderPending(s);
 
   const find = ui.lastFind;
   const findStale = find && (find.evidenceIds ?? []).some((id) => s.evidence[id]?.stale);
@@ -86,11 +169,27 @@ function render() {
   }
   $("#stale-banner").hidden = !findStale;
   $("#matrix-hint").hidden = !find || find.violations.length === 0;
-  $("#matrix tbody").innerHTML = find
-    ? find.violations.map((v, i) =>
-        `<tr data-row="${i}" class="${findStale ? "stale" : ""}${ui.selected && ui.selected.personaId === v.personaId && ui.selected.field === v.field ? " selected" : ""}">`
-        + `<td>${esc(v.personaId)}</td><td class="viol">${esc(v.invariantId)}</td><td>${esc(v.field)}</td><td>${esc(v.detail ?? "")}</td></tr>`).join("")
-    : "";
+  const matrixBody = $("#matrix tbody");
+  matrixBody.replaceChildren();
+  for (const [index, violation] of (find?.violations ?? []).entries()) {
+    const row = document.createElement("tr");
+    row.dataset.row = String(index);
+    if (findStale) row.classList.add("stale");
+    if (ui.selected && ui.selected.personaId === violation.personaId && ui.selected.field === violation.field)
+      row.classList.add("selected");
+    for (const [value, className] of [
+      [violation.personaId, ""],
+      [violation.invariantId, "viol"],
+      [violation.field, ""],
+      [violation.detail ?? "", ""],
+    ]) {
+      const cell = document.createElement("td");
+      if (className) cell.className = className;
+      cell.textContent = value;
+      row.append(cell);
+    }
+    matrixBody.append(row);
+  }
   for (const tr of document.querySelectorAll("#matrix tbody tr")) {
     tr.addEventListener("click", () => {
       const v = find.violations[Number(tr.dataset.row)];

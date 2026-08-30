@@ -95,7 +95,8 @@ test("stage accepts all three exact shapes and resolves omitted ids", async () =
     ],
   });
   assert.equal(result.ok, true);
-  assert.deepEqual(result.payload.pinIds, ["pin-1", "pin-2", "pin-3"]);
+  assert.deepEqual(result.payload.pendingRuleIds, ["pin-1", "pin-2", "pin-3"]);
+  assert.deepEqual(store.getState().pins, []);
 });
 
 test("prototype-named rule ids survive stage, find, and prepare coverage", async () => {
@@ -108,9 +109,10 @@ test("prototype-named rule ids survive stage, find, and prepare coverage", async
     ],
   });
   assert.equal(staged.ok, true);
+  store.dispatch({ type: "CONFIRM_RULES", version: staged.payload.pendingVersion });
 
   const found = runTool(store, personas, "find_mapping_counterexample", {
-    expectedRevision: staged.payload.revision,
+    expectedRevision: store.getState().revision,
   });
   assert.equal(found.ok, true);
   assert.equal(Object.hasOwn(found.payload.coverage, "__proto__"), true);
@@ -118,7 +120,7 @@ test("prototype-named rule ids survive stage, find, and prepare coverage", async
   assert.equal(JSON.stringify(found.payload.coverage), '{"__proto__":true}');
 
   const prepared = runTool(store, personas, "prepare_mapping_review", {
-    expectedRevision: staged.payload.revision,
+    expectedRevision: store.getState().revision,
     evidenceIds: found.payload.evidenceIds,
   });
   assert.equal(prepared.ok, true);
