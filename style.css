@@ -3,6 +3,13 @@ body { margin: 0; padding: 1.1rem clamp(1rem, 4vw, 2.2rem) 3rem; background: #f4
 header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: .4rem; }
 h1 { font-size: 1.45rem; margin: 0; letter-spacing: -.02em; }
 .tagline { color: #6b7683; font-size: .78rem; margin-top: .15rem; }
+.judge-actions { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; margin-top: .65rem; }
+.judge-actions button { padding: .38rem .65rem; border: 1px solid #cfc9bb; border-radius: 7px; background: #fffdf8; color: #1c2733; font: 600 .75rem/1.4 ui-sans-serif, -apple-system, "Segoe UI", sans-serif; cursor: pointer; }
+.judge-actions button:hover { border-color: #1459d9; color: #1459d9; }
+#copy-prompt-1 { background: #17212b; border-color: #17212b; color: #fffdf8; }
+#copy-prompt-1:hover { background: #1459d9; color: #fff; }
+#copy-status { min-height: 1.1rem; color: #08795e; font-size: .75rem; font-weight: 700; }
+.clipboard-fallback { position: fixed; left: -9999px; top: 0; opacity: 0; }
 h2 { font-size: .95rem; margin: 0 0 .5rem; letter-spacing: -.01em; }
 .badges { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; }
 .badge { display: inline-block; padding: .18rem .6rem; border-radius: 999px; background: #e7e3d8; font: 600 .72rem/1.5 ui-monospace, monospace; white-space: nowrap; }

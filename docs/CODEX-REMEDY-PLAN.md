@@ -533,9 +533,9 @@ the ban is on mutating through it.
 - Regenerate `docs/DEMO-SCRIPT.md` for the R7 flow using the review §9 rhythm table
   (result in the first 15s; the Confirm-all beat visible; STALE beat visible;
   GREEN packet close).
-- [ ] Step 1: implement buttons + tagline + demo script; e2e asserts both copy
+- [x] Step 1: implement buttons + tagline + demo script; e2e asserts both copy
       buttons exist and the tagline text changed (two selector assertions, no more).
-- [ ] Step 2: `npm test` + e2e green. Commit `remedy: judge mode — two-stage copy prompts, reset (R10)`.
+- [x] Step 2: `npm test` + e2e green. Commit `remedy: judge mode — two-stage copy prompts, reset (R10)`.
 - [ ] `(OPT)` Step 3: status strip + one e2e assertion.
 
 **Phase 1 boundary:** PUSH_GATE green → push. (K4: unit+smoke must be green at 18:00 PT 08-31.)

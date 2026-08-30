@@ -10,7 +10,13 @@
   <header>
     <div>
       <h1>IdentityMap Witness</h1>
-      <div class="tagline">the agent proves · the human signs</div>
+      <div class="tagline">finds the smallest set of synthetic people proving every violated rule on an unsaved draft — and the proof dies when you edit what it depended on</div>
+      <div class="judge-actions" aria-label="Judge demo actions">
+        <button id="copy-prompt-1" type="button" aria-describedby="copy-status">Copy prompt 1 — setup</button>
+        <button id="copy-prompt-2" type="button" aria-describedby="copy-status">Copy prompt 2 — after Confirm all</button>
+        <button id="reset-demo" type="button">Reset demo</button>
+        <span id="copy-status" role="status" aria-live="polite"></span>
+      </div>
     </div>
     <div id="status" class="badges">
       <span id="origin-badge" class="badge">origin: …</span>

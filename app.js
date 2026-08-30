@@ -7,6 +7,8 @@ import { parse } from "./src/engine/parser.mjs";
 const personas = await fetch("./data/personas.json").then((r) => r.json());
 const store = createStore(GOLDEN_STATE);
 const ui = { lastFind: null, lastSweep: null, lastPacket: null, selected: null, pendingError: null };
+const COPY_PROMPT_1 = "Read the mapping session on this page. Stage exactly these three invariants and then stop and tell me to confirm them on the page: (1) contractors must never map into the employees group; (2) if no source supplies managerId the target must stay null; (3) hris is the source of truth for department. Do not call any other tool until I tell you I confirmed.";
+const COPY_PROMPT_2 = "I confirmed the rules. Re-read the session, then find the minimal counterexample set. Walk me through fixing every violation: tell me exactly which expression or the priority order to change in the page UI. After each of my edits, re-find at the current revision. When violations reach zero, prepare the review packet from the fresh evidence ids.";
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) => String(v).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
@@ -16,6 +18,28 @@ allClear.id = "all-clear";
 allClear.className = "hint";
 allClear.hidden = true;
 $("#matrix").before(allClear);
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // The legacy path below also works when clipboard permission is unavailable.
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.readOnly = true;
+  textarea.className = "clipboard-fallback";
+  document.body.append(textarea);
+  textarea.select();
+  try {
+    if (!document.execCommand("copy")) throw new Error("copy command rejected");
+  } finally {
+    textarea.remove();
+  }
+}
 
 function renderPending(s) {
   const section = $("#pending-rules");
@@ -261,6 +285,20 @@ $("#priority-select").addEventListener("change", (event) => {
   store.dispatch({ type: "SET_PRIORITY", priority: event.target.value.split(",") });
   render();
 });
+for (const [selector, prompt, label] of [
+  ["#copy-prompt-1", COPY_PROMPT_1, "prompt 1 ready to paste"],
+  ["#copy-prompt-2", COPY_PROMPT_2, "prompt 2 ready to paste"],
+]) {
+  $(selector).addEventListener("click", async () => {
+    try {
+      await copyText(prompt);
+      $("#copy-status").textContent = `copied — ${label}`;
+    } catch {
+      $("#copy-status").textContent = "copy failed — clipboard unavailable";
+    }
+  });
+}
+$("#reset-demo").addEventListener("click", () => location.reload());
 $("#apply").addEventListener("click", () => alert("Apply stays human-only, and this demo never exercises it."));
 
 let registeredCount = 0;

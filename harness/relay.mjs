@@ -237,6 +237,10 @@ async function e2e(baseUrl) {
     return result;
   };
   try {
+    const copyButtonCount = await s.evalJs('document.querySelectorAll("#copy-prompt-1, #copy-prompt-2").length');
+    assertEq(copyButtonCount, 2, "judge mode copy button count");
+    const tagline = await s.evalJs('document.querySelector(".tagline")?.textContent');
+    assertEq(tagline, "finds the smallest set of synthetic people proving every violated rule on an unsaved draft — and the proof dies when you edit what it depended on", "judge mode tagline");
     // 1 read → r17
     const r1 = await call(1, "read_mapping_session", {});
     assertEq(r1.p.revision, 17, "round1 revision");
