@@ -448,12 +448,12 @@ all four SHA-256 values and fail-closes malformed raw sections.
   the packet state line, and the R7 pending-rules region get `aria-live="polite"`.
 - `(OPT)` extras: matrix rows `tabindex="0"` + Enter/Space triggering the row
   handler.
-- [ ] Step 1: e2e rounds (constants in R9's table): (i) select `hris → ad → okta`
+- [x] Step 1: e2e rounds (constants in R9's table): (i) select `hris → ad → okta`
       via a real DOM change event → revision bumps, all evidence stales, banner
       visible; (ii) type `user.` (invalid) into the managerId input + change event →
       revision unchanged, inline error visible, matrix intact; then a valid value →
       commits.
-- [ ] Step 2: implement; `npm test` + e2e green.
+- [x] Step 2: implement; `npm test` + e2e green.
       Commit `remedy: priority control, inline validation, a11y floor (R8)`.
 - [ ] `(OPT)` Step 3: matrix keyboard operability + its e2e assertion.
 

@@ -188,13 +188,41 @@ async function e2e(baseUrl) {
       if (!input) throw new Error(${JSON.stringify(`missing ${selector}`)});
       input.value = ${JSON.stringify(expr)};
       input.dispatchEvent(new Event("change", { bubbles: true }));
+      const liveInput = document.querySelector(${JSON.stringify(selector)});
+      const error = liveInput.parentElement.querySelector(".expression-error");
       return {
         revisionAfter: window.__imw.store.getState().revision,
         expressionAfter: window.__imw.store.getState().expressions[${JSON.stringify(field)}],
+        inputValue: liveInput.value,
+        ariaInvalid: liveInput.getAttribute("aria-invalid"),
+        errorHidden: error.hidden,
+        errorText: error.textContent,
       };
     })()`);
     trace.push({ round, kind: "human-dom", via: "dom-change",
       action: { type: "EDIT_EXPRESSION", field, expr }, ...result });
+    return result;
+  };
+  const humanPriority = async (round, priority) => {
+    const selector = "#priority-select";
+    const value = priority.join(",");
+    const result = await s.evalJs(`(() => {
+      const select = document.querySelector(${JSON.stringify(selector)});
+      if (!select) throw new Error(${JSON.stringify(`missing ${selector}`)});
+      select.value = ${JSON.stringify(value)};
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      const state = window.__imw.store.getState();
+      return {
+        revisionAfter: state.revision,
+        priorityAfter: state.priority,
+        selectValue: document.querySelector(${JSON.stringify(selector)}).value,
+        optionLabels: [...document.querySelector(${JSON.stringify(selector)}).options].map((option) => option.textContent),
+        evidenceAllStale: Object.values(state.evidence).every((evidence) => evidence.stale),
+        staleBannerVisible: !document.querySelector("#stale-banner").hidden,
+      };
+    })()`);
+    trace.push({ round, kind: "human-dom", via: "dom-change", selector,
+      action: { type: "SET_PRIORITY", priority }, ...result });
     return result;
   };
   const humanClick = async (round, selector) => {
@@ -257,9 +285,22 @@ async function e2e(baseUrl) {
     assertEq(staleConfirm.pinCount, 0, "round2 stale confirm applies no pins");
     assertEq(staleConfirm.currentButtonVersion, 2, "round2 re-render keeps current version");
     assertEq(staleConfirm.error.includes("STALE_CONFIRM"), true, "round2 stale confirm is visible");
+    const stagedA11y = await s.evalJs(`({
+      controlsNamed: [...document.querySelectorAll("input, select, button")].every((control) =>
+        Boolean(control.getAttribute("aria-label") || control.labels?.length || control.textContent.trim())),
+      priorityLabelled: document.querySelector("#priority-select").labels.length === 1,
+      politeRegions: ["#pending-rules", "#stale-banner", "#packet-state"].every((selector) =>
+        document.querySelector(selector).getAttribute("aria-live") === "polite"),
+    })`);
+    assertEq(stagedA11y.controlsNamed, true, "round2 every rendered control has an accessible name");
+    assertEq(stagedA11y.priorityLabelled, true, "round2 priority select has a programmatic label");
+    assertEq(stagedA11y.politeRegions, true, "round2 state regions are polite live regions");
     const confirmed2 = await humanClick(2, "#confirm-pending");
     assertEq(confirmed2.revisionAfter, 18, "round2 confirm revision");
     assertEq(confirmed2.pinIdsAfter, PINS.map((pin) => pin.id), "round2 confirmed pins");
+    const unpinLabels = await s.evalJs(`([...document.querySelectorAll("#pins [data-unpin]")]
+      .map((button) => button.getAttribute("aria-label")))`);
+    assertEq(unpinLabels, PINS.map((pin) => `Unpin invariant ${pin.id}`), "round2 unpin controls are labelled");
     // 3 find → witness [P2,P3,P4], evidence E1
     const r3 = await call(3, "find_mapping_counterexample", { expectedRevision: 18 });
     assertEq(r3.p.personaIds, ["P2", "P3", "P4"], "round3 witness");
@@ -286,10 +327,15 @@ async function e2e(baseUrl) {
     assertEq(r7.p.remainingViolations, 0, "round7 remaining");
     const rev7 = await s.evalJs("window.__imw.store.getState().revision");
     assertEq(rev7, 19, "round7 preview must not bump revision");
-    // 8 human applies group fix (r20) + priority fix (r21); clean sweep → green packet
+    // 8 human applies group fix (r20) + real priority control (r21); clean sweep → green packet
     await human(8, { type: "EDIT_EXPRESSION", field: "group", expr: 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"' });
-    const rev8 = await human(8, { type: "SET_PRIORITY", priority: ["hris", "ad"] });
-    assertEq(rev8, 21, "round8 revision");
+    const priority8 = await humanPriority(8, ["hris", "ad"]);
+    assertEq(priority8.revisionAfter, 21, "round8 revision");
+    assertEq(priority8.priorityAfter, ["hris", "ad"], "round8 priority committed through select");
+    assertEq(priority8.selectValue, "hris,ad", "round8 select stays synchronized");
+    assertEq(priority8.optionLabels, ["ad → hris → okta", "hris → ad → okta"], "round8 select has exactly two choices");
+    assertEq(priority8.evidenceAllStale, true, "round8 priority change stales every prior evidence record");
+    assertEq(priority8.staleBannerVisible, true, "round8 priority change exposes stale banner");
     const r8 = await call(8, "find_mapping_counterexample", { expectedRevision: 21 });
     assertEq(r8.p.cleanSweep, true, "round8 clean sweep");
     assertEq(r8.p.fullSweep, true, "round8 full sweep");
@@ -378,11 +424,61 @@ async function e2e(baseUrl) {
     assertEq(green11.text.includes("GREEN"), true, "round11 recovered packet text");
     assertEq(green11.applyDisabled, false, "round11 recovered packet enables apply");
 
+    // 12 invalid input stays local and preserves the complete store + GREEN UI; valid input commits once
+    const before12 = await s.evalJs(`({
+      snapshot: JSON.stringify(window.__imw.store.snapshot()),
+      matrixRows: document.querySelectorAll("#matrix tbody tr").length,
+      matrixText: document.querySelector("#matrix tbody").textContent,
+      gridFields: [...document.querySelectorAll("#grid input")].map((input) => input.dataset.field),
+      otherGridValues: [...document.querySelectorAll("#grid input")]
+        .filter((input) => input.dataset.field !== "managerId")
+        .map((input) => [input.dataset.field, input.value]),
+      packetText: document.querySelector("#packet-state").textContent,
+      packetGreen: document.querySelector("#packet-state").classList.contains("green"),
+      applyDisabled: document.querySelector("#apply").disabled,
+    })`);
+    assertEq(before12.packetGreen, true, "round12 starts with GREEN packet");
+    assertEq(before12.applyDisabled, false, "round12 starts with apply enabled");
+    const invalid12 = await humanExpression(12, "managerId", "user.");
+    assertEq(invalid12.revisionAfter, 25, "round12 invalid expression does not bump revision");
+    assertEq(invalid12.expressionAfter, "user.managerId", "round12 invalid expression does not commit");
+    assertEq(invalid12.inputValue, "user.", "round12 invalid input remains visible");
+    assertEq(invalid12.ariaInvalid, "true", "round12 invalid input is marked invalid");
+    assertEq(invalid12.errorHidden, false, "round12 inline error is visible");
+    assertEq(invalid12.errorText.includes("position 5"), true, "round12 inline error includes parser position");
+    const afterInvalid12 = await s.evalJs(`({
+      snapshot: JSON.stringify(window.__imw.store.snapshot()),
+      matrixRows: document.querySelectorAll("#matrix tbody tr").length,
+      matrixText: document.querySelector("#matrix tbody").textContent,
+      gridFields: [...document.querySelectorAll("#grid input")].map((input) => input.dataset.field),
+      otherGridValues: [...document.querySelectorAll("#grid input")]
+        .filter((input) => input.dataset.field !== "managerId")
+        .map((input) => [input.dataset.field, input.value]),
+      packetText: document.querySelector("#packet-state").textContent,
+      packetGreen: document.querySelector("#packet-state").classList.contains("green"),
+      applyDisabled: document.querySelector("#apply").disabled,
+    })`);
+    assertEq(afterInvalid12.snapshot, before12.snapshot, "round12 invalid input leaves complete snapshot byte-identical");
+    assertEq(afterInvalid12.matrixRows, before12.matrixRows, "round12 invalid input preserves matrix rows");
+    assertEq(afterInvalid12.matrixText, before12.matrixText, "round12 invalid input preserves matrix text");
+    assertEq(afterInvalid12.gridFields, before12.gridFields, "round12 invalid input preserves grid fields");
+    assertEq(afterInvalid12.otherGridValues, before12.otherGridValues, "round12 invalid input preserves other grid values");
+    assertEq(afterInvalid12.packetText, before12.packetText, "round12 invalid input preserves packet text");
+    assertEq(afterInvalid12.packetGreen, true, "round12 invalid input preserves GREEN packet");
+    assertEq(afterInvalid12.applyDisabled, false, "round12 invalid input leaves apply enabled");
+
+    const valid12 = await humanExpression(12, "managerId", "user.managerId");
+    assertEq(valid12.revisionAfter, invalid12.revisionAfter + 1, "round12 valid expression bumps exactly once");
+    assertEq(valid12.revisionAfter, 26, "round12 valid expression revision");
+    assertEq(valid12.expressionAfter, "user.managerId", "round12 valid expression commits");
+    assertEq(valid12.ariaInvalid, "false", "round12 valid expression clears invalid state");
+    assertEq(valid12.errorHidden, true, "round12 valid expression clears inline error");
+
     const sha = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
     const out = `eval/out/relay-${sha}.json`;
     await writeFile(new URL(`../${out}`, import.meta.url),
-      JSON.stringify({ sha, when: new Date().toISOString(), rounds: 11, trace }, null, 2));
-    ok(`e2e: 11 rounds green — stale rejection (r5), mismatch recovery (r9), pin-coverage flip (r10), packet freshness recovery (r11); trace → ${out}`);
+      JSON.stringify({ sha, when: new Date().toISOString(), rounds: 12, trace }, null, 2));
+    ok(`e2e: 12 rounds green — stale rejection (r5), mismatch recovery (r9), pin-coverage flip (r10), packet freshness recovery (r11), inline validation (r12); trace → ${out}`);
   } finally {
     s.cdp.close();
     await s.chrome.close();
@@ -397,7 +493,7 @@ try {
     console.log("SMOKE PASS (3 cold sessions)");
   } else if (MODE === "--e2e") {
     await e2e(baseUrl);
-    console.log("E2E PASS (11 rounds)");
+    console.log("E2E PASS (12 rounds)");
   } else {
     fail(`unknown mode ${MODE}`);
   }

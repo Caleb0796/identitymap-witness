@@ -2,6 +2,7 @@
 import { TOOLS, runTool, GOLDEN_STATE } from "./src/tools/defs.mjs";
 import { createStore, packetFresh } from "./src/store/reducer.mjs";
 import { evaluateAll } from "./src/engine/witness.mjs";
+import { parse } from "./src/engine/parser.mjs";
 
 const personas = await fetch("./data/personas.json").then((r) => r.json());
 const store = createStore(GOLDEN_STATE);
@@ -61,6 +62,7 @@ function renderPending(s) {
     button.type = "button";
     button.dataset.version = String(s.pending.version);
     button.textContent = label;
+    button.setAttribute("aria-label", label);
     button.addEventListener("click", () => {
       try {
         store.dispatch({ type, version: Number(button.dataset.version) });
@@ -79,7 +81,7 @@ function renderPending(s) {
 function renderRail(outs) {
   const sel = ui.selected;
   const section = $("#provenance");
-  if (!sel || !outs[sel.personaId]) { section.hidden = true; return; }
+  if (!outs || !sel || !outs[sel.personaId]) { section.hidden = true; return; }
   const cell = outs[sel.personaId].fields[sel.field];
   if (!cell) { section.hidden = true; return; }
   section.hidden = false;
@@ -106,19 +108,49 @@ function renderRail(outs) {
 function render() {
   const s = store.getState();
   $("#rev-badge").textContent = `r${s.revision}`;
-  $("#priority").textContent = [...s.priority, "okta"].join(" → ");
+  $("#priority-select").value = s.priority.join(",");
 
-  const outs = evaluateAll(s, personas);
+  const evaluationError = $("#evaluation-error");
+  let outs = null;
+  try {
+    outs = evaluateAll(s, personas);
+    evaluationError.hidden = true;
+    evaluationError.textContent = "";
+  } catch (caught) {
+    evaluationError.hidden = false;
+    evaluationError.textContent = `Evaluation unavailable: ${String(caught?.message ?? caught)}`;
+  }
   const chips = {};
   for (const field of Object.keys(s.expressions)) {
-    const sources = new Set(personas.map((p) => outs[p.id].fields[field].prov.source ?? "∅"));
-    chips[field] = [...sources].join(",");
+    if (outs) {
+      const sources = new Set(personas.map((p) => outs[p.id].fields[field].prov.source ?? "∅"));
+      chips[field] = [...sources].join(",");
+    } else {
+      chips[field] = "unavailable";
+    }
   }
   $("#grid tbody").innerHTML = Object.entries(s.expressions)
-    .map(([f, e]) => `<tr><td>${f}</td><td><input data-field="${f}" value="${esc(e)}"></td><td class="prov-chip">${chips[f]}</td></tr>`)
+    .map(([f, e]) => `<tr><td>${f}</td><td class="expression-cell">`
+      + `<label class="visually-hidden" for="expression-${f}">Expression for ${f}</label>`
+      + `<input id="expression-${f}" data-field="${f}" value="${esc(e)}" aria-invalid="false" aria-describedby="expression-error-${f}">`
+      + `<div id="expression-error-${f}" class="expression-error" aria-live="polite" hidden></div>`
+      + `</td><td class="prov-chip">${chips[f]}</td></tr>`)
     .join("");
   for (const input of document.querySelectorAll("#grid input")) {
     input.addEventListener("change", (ev) => {
+      const error = ev.target.parentElement.querySelector(".expression-error");
+      try {
+        parse(ev.target.value);
+      } catch (caught) {
+        const position = Number.isInteger(caught?.position) ? caught.position : 0;
+        ev.target.setAttribute("aria-invalid", "true");
+        error.hidden = false;
+        error.textContent = `Invalid expression at position ${position}: ${String(caught?.message ?? caught)}`;
+        return;
+      }
+      ev.target.setAttribute("aria-invalid", "false");
+      error.hidden = true;
+      error.textContent = "";
       store.dispatch({ type: "EDIT_EXPRESSION", field: ev.target.dataset.field, expr: ev.target.value });
       render();
     });
@@ -143,6 +175,7 @@ function render() {
       remove.type = "button";
       remove.dataset.unpin = pin.id;
       remove.title = "unpin";
+      remove.setAttribute("aria-label", `Unpin invariant ${pin.id}`);
       remove.textContent = "✕";
       chip.append(id, type, remove);
       item.append(chip);
@@ -224,6 +257,10 @@ const present = typeof document.modelContext !== "undefined" && document.modelCo
 $("#origin-badge").textContent = `origin: ${location.host}`;
 $("#mc-badge").textContent = `modelContext: ${present ? "present" : "absent"}`;
 $("#mc-badge").classList.add(present ? "on" : "off");
+$("#priority-select").addEventListener("change", (event) => {
+  store.dispatch({ type: "SET_PRIORITY", priority: event.target.value.split(",") });
+  render();
+});
 $("#apply").addEventListener("click", () => alert("Apply stays human-only, and this demo never exercises it."));
 
 let registeredCount = 0;

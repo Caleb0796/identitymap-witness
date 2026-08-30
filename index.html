@@ -22,7 +22,15 @@
   <main>
     <section id="mapping" class="card">
       <h2>Unsaved mapping draft</h2>
-      <div class="hint">Priority: <span id="priority"></span> · session-only until a human saves · synthetic personas, canary identities</div>
+      <div class="hint">
+        <label for="priority-select">Priority:</label>
+        <select id="priority-select">
+          <option value="ad,hris">ad → hris → okta</option>
+          <option value="hris,ad">hris → ad → okta</option>
+        </select>
+        · session-only until a human saves · synthetic personas, canary identities
+      </div>
+      <div id="evaluation-error" class="stale-banner" aria-live="polite" hidden></div>
       <table id="grid"><thead><tr><th>target field</th><th>expression (draft)</th><th>prov</th></tr></thead><tbody></tbody></table>
     </section>
     <section id="invariants" class="card">
@@ -38,7 +46,7 @@
     </section>
     <section id="witness" class="card">
       <h2>Counterexample matrix</h2>
-      <div id="stale-banner" class="stale-banner" hidden>STALE — the draft changed after this evidence was computed; the packet below will refuse it</div>
+      <div id="stale-banner" class="stale-banner" aria-live="polite" hidden>STALE — the draft changed after this evidence was computed; the packet below will refuse it</div>
       <table id="matrix"><thead><tr><th>persona</th><th>invariant</th><th>field</th><th>detail</th></tr></thead><tbody></tbody></table>
       <div class="hint" id="matrix-hint" hidden>click a row for provenance</div>
     </section>
@@ -48,8 +56,8 @@
     </section>
     <section id="packet" class="card">
       <h2>Review packet</h2>
-      <div id="packet-state" class="hint">no packet</div>
-      <button id="apply" disabled title="Never enabled for the agent; stays human-only">Apply mapping (human only)</button>
+      <div id="packet-state" class="hint" aria-live="polite">no packet</div>
+      <button id="apply" aria-label="Apply mapping (human only)" disabled title="Never enabled for the agent; stays human-only">Apply mapping (human only)</button>
     </section>
   </main>
   <script type="module" src="./app.js"></script>
