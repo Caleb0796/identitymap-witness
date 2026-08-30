@@ -588,7 +588,7 @@ All doc numbers from your own fresh command output (hard rule 8):
       `tests/verify-boxes.test.mjs` for the box-counting function (extract it) —
       ordinary unchecked box counts, `(OPT)` box does not, `(VERIFY-SELF)` box
       does not.
-- [ ] (VERIFY-SELF) Full PUSH_GATE + `node tools/verify.mjs` → expect CODE_COMPLETE
+- [x] (VERIFY-SELF) Full PUSH_GATE + `node tools/verify.mjs` → expect CODE_COMPLETE
       with HUMAN-REMAINING TODO only for video / Devpost / any remaining human
       evidence. Commit
       `remedy: consistency + metadata + verifier authority + human eval protocol (R13)` and push.
