@@ -209,16 +209,16 @@ Capping only `reason` is not enough (adversarial finding 5): caller-controlled
 `personaId` echoes and large `staleIds` arrays must also be bounded — the
 total-size fallback above bounds everything.
 
-- [ ] Step 1: failing unit test `tests/finalizer.test.mjs`: matrix over every tool ×
+- [x] Step 1: failing unit test `tests/finalizer.test.mjs`: matrix over every tool ×
       every reachable error code (reuse R2's drivers) asserting the FINAL envelope
       (exactly what `app.js` stringifies) has no `CANARY_` and is ≤1,500 chars.
       Include: the `CANARY_SECRET` persona-id repro; a CANARY-bearing unknown
       invariant id on `find`; a >1,500-char persona id; a `STALE_EVIDENCE` with
       enough ids to exceed the budget (assert the fallback envelope keeps
       `code: "STALE_EVIDENCE"`).
-- [ ] Step 2: implement `finalize(r)` in `defs.mjs`; `runTool` returns only
+- [x] Step 2: implement `finalize(r)` in `defs.mjs`; `runTool` returns only
       finalized envelopes. `app.js` keeps serializing `r.ok ? r.payload : { error: r.error }`.
-- [ ] Step 3: confirm `harness/relay.mjs`'s canary check covers error rounds (its
+- [x] Step 3: confirm `harness/relay.mjs`'s canary check covers error rounds (its
       `call()` already throws on `CANARY_` in any round text — verify by reading).
       `npm test` + e2e green. Commit `remedy: unified success/error finalizer with total-size fallback (R3)`.
 
