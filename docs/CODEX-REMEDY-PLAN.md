@@ -148,20 +148,20 @@ finding 3): `app.js` renders the global green "clean sweep — 0 violations acro
 leaves the existing matrix untouched. The error code `NO_COUNTEREXAMPLE` ceases to
 exist.
 
-- [ ] Step 1: failing unit test `tests/cleansweep.test.mjs`: corrected state + 3 pins →
+- [x] Step 1: failing unit test `tests/cleansweep.test.mjs`: corrected state + 3 pins →
       find returns `ok:true`, `cleanSweep:true`, `fullSweep:true`, `violations:[]`,
       one `clean-sweep` evidence id; a counterexample-state find returns
       `cleanSweep:false`; broken state + `invariantIds:["inv-null"]` after fixing
       only managerId → `cleanSweep:true, fullSweep:false` (this is the review-3
       repro); prepare over that scoped evidence still blocks the other pins as
       uncovered (assert it — the packet layer must stay immune).
-- [ ] Step 2: implement in `defs.mjs`; migrate every test asserting the
+- [x] Step 2: implement in `defs.mjs`; migrate every test asserting the
       `NO_COUNTEREXAMPLE` error shape (grep `tests/` for the string); update
       `harness/relay.mjs` rounds 8/9 assertions to the new shape.
-- [ ] Step 3: `app.js` all-clear + scoped-clean render; e2e asserts after the
+- [x] Step 3: `app.js` all-clear + scoped-clean render; e2e asserts after the
       full-sweep clean round: `#matrix tbody tr` count 0 and the all-clear element
       visible.
-- [ ] Step 4: SPEC.md §7 updated (r4 changelog line). `npm test` and
+- [x] Step 4: SPEC.md §7 updated (r4 changelog line). `npm test` and
       `node harness/relay.mjs --e2e` green. Commit `remedy: clean sweep is a success result, fullSweep-gated all-clear (R1)`.
 
 ### R2 — failed tool calls have zero side effects (snapshot/rollback)

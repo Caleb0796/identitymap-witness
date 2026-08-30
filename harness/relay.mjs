@@ -153,8 +153,13 @@ async function e2e(baseUrl) {
     const rev8 = await human(8, { type: "SET_PRIORITY", priority: ["hris", "ad"] });
     assertEq(rev8, 21, "round8 revision");
     const r8 = await call(8, "find_mapping_counterexample", { expectedRevision: 21 });
-    assertEq(r8.p.error.code, "NO_COUNTEREXAMPLE", "round8 clean sweep");
-    const E3 = r8.p.error.evidenceIds;
+    assertEq(r8.p.cleanSweep, true, "round8 clean sweep");
+    assertEq(r8.p.fullSweep, true, "round8 full sweep");
+    const rows8 = await s.evalJs('document.querySelectorAll("#matrix tbody tr").length');
+    assertEq(rows8, 0, "round8 clean sweep clears matrix");
+    const allClear8 = await s.evalJs('!document.querySelector("#all-clear").hidden && document.querySelector("#all-clear").textContent.includes("clean sweep — 0 violations across 8 personas at r21")');
+    assertEq(allClear8, true, "round8 all-clear visible");
+    const E3 = r8.p.evidenceIds;
     const r8b = await call(8, "prepare_mapping_review", { expectedRevision: 21, evidenceIds: E3 });
     assertEq(r8b.p.blockers, [], "round8 packet green");
     // 9 recovery: wrong expectedRevision → REVISION_MISMATCH with currentRevision → one retry works
@@ -162,7 +167,8 @@ async function e2e(baseUrl) {
     assertEq(r9.p.error.code, "REVISION_MISMATCH", "round9 code");
     assertEq(r9.p.error.currentRevision, 21, "round9 currentRevision");
     const r9b = await call(9, "find_mapping_counterexample", { expectedRevision: r9.p.error.currentRevision });
-    assertEq(r9b.p.error.code, "NO_COUNTEREXAMPLE", "round9 recovery lands on the clean sweep");
+    assertEq(r9b.p.cleanSweep, true, "round9 recovery lands on the clean sweep");
+    assertEq(r9b.p.fullSweep, true, "round9 recovery covers every confirmed pin");
     // 10 pin add → packet incomplete-by-coverage; unpin → green again
     const r10 = await call(10, "stage_mapping_invariants", { expectedRevision: 21, invariants: [
       ...PINS, { id: "pin-extra", type: "forbidden_group", personaCategory: "nobody", group: "nothing" }] });

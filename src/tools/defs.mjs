@@ -1,4 +1,4 @@
-// Isomorphic tool surface — SPEC.md r2 §7, complete contracts. Imported unchanged
+// Isomorphic tool surface — SPEC.md r4 §7, complete contracts. Imported unchanged
 // by the page (app.js), the tests, and the ablation. Zero node-only imports.
 import { parse } from "../engine/parser.mjs";
 import { evaluate } from "../engine/eval.mjs";
@@ -67,23 +67,41 @@ const HANDLERS = {
         return failure("BAD_RULE", { reason: `unknown invariant id ${id}` });
       pins = s.pins.filter((p) => args.invariantIds.includes(p.id));
     }
+    const checkedInvariantIds = pins.map((p) => p.id);
+    const confirmedInvariantIds = new Set(s.pins.map((p) => p.id));
+    const checkedInvariantSet = new Set(checkedInvariantIds);
+    const fullSweep = checkedInvariantSet.size === confirmedInvariantIds.size
+      && [...confirmedInvariantIds].every((id) => checkedInvariantSet.has(id));
     const r = findWitness({ ...s, pins }, personas);
     if (r.violations.length === 0) {
       // Clean sweep is still evidence — recorded so a green packet can cite it.
       const evidenceId = store.recordEvidence("clean-sweep", {
         fields: Object.keys(s.expressions),
-        invariants: pins.map((p) => p.id),
+        invariants: checkedInvariantIds,
         personas: personas.map((p) => p.id),
       }, { violations: [] });
-      return failure("NO_COUNTEREXAMPLE", { checked: personas.length, evidenceIds: [evidenceId] });
+      return { ok: true, payload: {
+        revision: s.revision,
+        cleanSweep: true,
+        fullSweep,
+        checkedInvariantIds,
+        confirmedInvariantCount: s.pins.length,
+        checked: personas.length,
+        personaIds: [],
+        violations: [],
+        evidenceIds: [evidenceId],
+      } };
     }
     const evidenceId = store.recordEvidence("counterexample", {
       fields: Object.keys(s.expressions),
-      invariants: pins.map((p) => p.id),
+      invariants: checkedInvariantIds,
       personas: personas.map((p) => p.id),
     }, { violations: r.violations, personaIds: r.personaIds });
     return { ok: true, payload: {
       revision: s.revision,
+      cleanSweep: false,
+      fullSweep,
+      checkedInvariantIds,
       personaIds: r.personaIds,
       violations: r.violations,
       coverage: r.coverage,

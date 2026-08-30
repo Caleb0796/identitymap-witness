@@ -5,11 +5,16 @@ import { evaluateAll } from "./src/engine/witness.mjs";
 
 const personas = await fetch("./data/personas.json").then((r) => r.json());
 const store = createStore(GOLDEN_STATE);
-const ui = { lastFind: null, lastPacket: null, selected: null };
+const ui = { lastFind: null, lastSweep: null, lastPacket: null, selected: null };
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) => String(v).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
 const show = (v) => v === null ? "∅ null" : v === "" ? '"" empty' : esc(v);
+const allClear = document.createElement("div");
+allClear.id = "all-clear";
+allClear.className = "hint";
+allClear.hidden = true;
+$("#matrix").before(allClear);
 
 function renderRail(outs) {
   const sel = ui.selected;
@@ -68,8 +73,19 @@ function render() {
 
   const find = ui.lastFind;
   const findStale = find && (find.evidenceIds ?? []).some((id) => s.evidence[id]?.stale);
+  const sweep = ui.lastSweep;
+  const sweepStale = sweep && (sweep.evidenceIds ?? []).some((id) => s.evidence[id]?.stale);
+  const sweepStillFull = sweep?.fullSweep && sweep.confirmedInvariantCount === s.pins.length;
+  allClear.hidden = !(sweep?.cleanSweep && !sweepStale);
+  if (sweep?.cleanSweep && !sweepStale) {
+    allClear.textContent = sweepStillFull
+      ? `clean sweep — 0 violations across ${sweep.checked} personas at r${sweep.revision}`
+      : `scoped check clean: ${sweep.checkedInvariantIds.join(", ")} — other pinned rules NOT checked`;
+  } else {
+    allClear.textContent = "";
+  }
   $("#stale-banner").hidden = !findStale;
-  $("#matrix-hint").hidden = !find;
+  $("#matrix-hint").hidden = !find || find.violations.length === 0;
   $("#matrix tbody").innerHTML = find
     ? find.violations.map((v, i) =>
         `<tr data-row="${i}" class="${findStale ? "stale" : ""}${ui.selected && ui.selected.personaId === v.personaId && ui.selected.field === v.field ? " selected" : ""}">`
@@ -117,7 +133,16 @@ if (present) {
       annotations: t.annotations,
       execute: async (args) => {
         const r = runTool(store, personas, t.name, args ?? {});
-        if (r.ok && t.name === "find_mapping_counterexample") { ui.lastFind = r.payload; ui.selected = null; }
+        if (r.ok && t.name === "find_mapping_counterexample") {
+          if (r.payload.cleanSweep) {
+            ui.lastSweep = r.payload;
+            if (r.payload.fullSweep) { ui.lastFind = r.payload; ui.selected = null; }
+          } else {
+            ui.lastFind = r.payload;
+            ui.lastSweep = null;
+            ui.selected = null;
+          }
+        }
         if (r.ok && t.name === "prepare_mapping_review") ui.lastPacket = r.payload;
         render(); // UI updates BEFORE the tool returns (SPEC §7)
         return { content: [{ type: "text", text: JSON.stringify(r.ok ? r.payload : { error: r.error }) }] };

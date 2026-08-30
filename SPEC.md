@@ -1,11 +1,12 @@
-# IdentityMap Witness — SPEC (r2, post-review)
+# IdentityMap Witness — SPEC (r4, remedy contracts)
 
 Authority note: this file + `EVAL.md` + `docs/plans/2026-08-29-identitymap-witness.md`
 are the three authorities. Narrative docs restate them and lose on conflict.
 Deadline: **Devpost 2026-09-03 13:00 PT**. r2 incorporates the 2026-08-29
 gpt-5.6-sol adversarial review (`reviews/codex-sol-2026-08-29.md`): direction cut,
 defective-by-design golden draft, full tool schemas, fingerprint invalidation,
-honest eval relabeling.
+honest eval relabeling. r4 changelog — R1: clean sweeps are successful results,
+with explicit checked scope and full-sweep-gated global all-clear UI.
 
 ## 1. One line
 
@@ -157,12 +158,19 @@ tool exists.
 **find_mapping_counterexample** (readOnly true — records evidence, no draft change)
 - in: `{expectedRevision, invariantIds: [string], maxPersonas?: number<=8}`
 - Evaluates ALL personas × ALL expressions, checks the named pins, exhaustive
-  minimal witness (2^8 subsets max). out: `{revision, personaIds, violations:
+  minimal witness (2^8 subsets max). A violating success returns `{revision,
+  cleanSweep:false, fullSweep, checkedInvariantIds, personaIds, violations:
   [{invariantId, personaId, field, detail}], coverage: {invId: bool}, evidenceIds}`.
-  No violations → error `NO_COUNTEREXAMPLE {checked, evidenceIds}` (not an empty
-  success — the agent must distinguish; a `clean-sweep` evidence IS recorded and its
-  id returned inside the error so `prepare_mapping_review` can cite the all-clear).
-  Unknown pin id → `BAD_RULE`. Engine throw → `EVALUATOR_FAILED`.
+  No violations is also a success: `{revision, cleanSweep:true, fullSweep,
+  checkedInvariantIds, confirmedInvariantCount, checked, personaIds:[],
+  violations:[], evidenceIds}`; its single `clean-sweep` evidence id is citable by
+  `prepare_mapping_review`. `fullSweep` is true exactly when the checked invariant
+  set equals all confirmed pins, whether the request omitted `invariantIds` or
+  explicitly named every pin. A scoped clean result never clears the existing
+  matrix or presents a global all-clear; only `cleanSweep && fullSweep` renders
+  `clean sweep — 0 violations across {checked} personas at r{revision}`. The
+  `NO_COUNTEREXAMPLE` error code no longer exists. Unknown pin id → `BAD_RULE`.
+  Engine throw → `EVALUATOR_FAILED`.
 
 **preview_mapping_patch** (readOnly true — records evidence, DOES NOT edit the draft)
 - in: `{expectedRevision, field, expr, personaIds: [string]}`

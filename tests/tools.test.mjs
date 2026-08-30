@@ -83,7 +83,7 @@ test("BAD_RULE: unknown type, missing field, unknown invariantId; pin replace no
   assert.deepEqual(r.payload.pinIds, ["inv-forbid"]);
 });
 
-test("NO_COUNTEREXAMPLE is an error, not an empty success (clean snapshot)", async () => {
+test("a clean snapshot returns successful closing evidence", async () => {
   const personas = await load("personas.json");
   const snapshot = await load("persisted-snapshot.json");
   const store = createStore(snapshot);
@@ -91,12 +91,13 @@ test("NO_COUNTEREXAMPLE is an error, not an empty success (clean snapshot)", asy
     { expectedRevision: snapshot.revision, invariants: PINS });
   const r = runTool(store, personas, "find_mapping_counterexample",
     { expectedRevision: stage.payload.revision });
-  assert.equal(r.ok, false);
-  assert.equal(r.error.code, "NO_COUNTEREXAMPLE");
-  assert.equal(r.error.checked, 8);
-  assert.equal(r.error.evidenceIds.length, 1); // clean sweep is citable evidence
+  assert.equal(r.ok, true);
+  assert.equal(r.payload.cleanSweep, true);
+  assert.equal(r.payload.fullSweep, true);
+  assert.equal(r.payload.checked, 8);
+  assert.equal(r.payload.evidenceIds.length, 1); // clean sweep is citable evidence
   const prep = runTool(store, personas, "prepare_mapping_review",
-    { expectedRevision: store.getState().revision, evidenceIds: r.error.evidenceIds });
+    { expectedRevision: store.getState().revision, evidenceIds: r.payload.evidenceIds });
   assert.ok(prep.ok);
   assert.deepEqual(prep.payload.blockers, []);
 });
