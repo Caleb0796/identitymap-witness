@@ -548,29 +548,29 @@ the ban is on mutating through it.
 
 All doc numbers from your own fresh command output (hard rule 8):
 
-- [ ] `package.json` engines → `">=21"` (matches `harness/cdp.mjs` native WebSocket).
-- [ ] `LICENSE` — MIT, copyright 2026 Caleb (repo stays private; the file lands now
+- [x] `package.json` engines → `">=21"` (matches `harness/cdp.mjs` native WebSocket).
+- [x] `LICENSE` — MIT, copyright 2026 Caleb (repo stays private; the file lands now
       so the 09-03 flip is one click).
-- [ ] GitHub metadata (repo stays PRIVATE):
+- [x] GitHub metadata (repo stays PRIVATE):
       `gh repo edit Caleb0796/identitymap-witness --description "Find the minimal persona set proving every violated identity-mapping invariant on an unsaved draft — evidence dies when the human edits. WebMCP Challenge entry." --homepage "https://identitymap-witness.onrender.com" --add-topic webmcp --add-topic identity --add-topic human-in-the-loop --add-topic devpost`
-- [ ] `README.md` rewrite: real test count from `npm test` output; status paragraph
+- [x] `README.md` rewrite: real test count from `npm test` output; status paragraph
       reflects audited oracle + eval exit 0; the R7 confirm flow; run instructions
       for judges (clone → `npm test` → `node harness/serve.mjs` → Chrome 152 with
       `--enable-features=WebMCP` and a fresh `--user-data-dir`; or the live URL in a
       WebMCP-capable browser); the judge path (two copy buttons); the coverage
       claim scoped to "loaded `src/**` files", or dropped.
-- [ ] `EVAL.md`: remove the "≥70 tests" numeric target — replace with "the real
+- [x] `EVAL.md`: remove the "≥70 tests" numeric target — replace with "the real
       count is whatever `npm test` prints; risk coverage over count". Update the
       `NO_COUNTEREXAMPLE` and `human-sim` mentions to the R1/R9 contracts, and gate
       descriptions changed by R6/R7.
-- [ ] `docs/DEVPOST-DRAFT.md` rewrite: current truth (audited oracle, eval PASS,
+- [x] `docs/DEVPOST-DRAFT.md` rewrite: current truth (audited oracle, eval PASS,
       confirm flow, packet freshness), the R10 positioning line, the concessions
       block (SPEC §2), the limitations block — checked against hard rule 10.
-- [ ] Fixture honesty: rename the personas test so its name matches what it asserts
+- [x] Fixture honesty: rename the personas test so its name matches what it asserts
       ("identity-bearing keys use canary format; okta always carries identity") —
       data stays frozen; grep README/SPEC/DEVPOST for any "every source profile
       carries identity canaries" claim and narrow the wording.
-- [ ] `docs/HUMAN-EVAL-PROTOCOL.md` (new): three ChatGPT built-in-browser cold runs —
+- [x] `docs/HUMAN-EVAL-PROTOCOL.md` (new): three ChatGPT built-in-browser cold runs —
       (1) DIRECT: the two R10 prompts verbatim; (2) AMBIGUOUS: "make sure this
       mapping draft is safe before I save it" and nothing else; (3) STALE-RECOVERY:
       mid-run human edit, agent must re-read and re-find. Each run: transcription
@@ -578,7 +578,7 @@ All doc numbers from your own fresh command output (hard rule 8):
       target files `evidence/model-eval-{direct,ambiguous,stale}.json` + PNGs.
       Run (1) doubles as the R7 re-capture (R7 step 5). These are HUMAN tasks for
       09-01 evening — write the protocol, do not attempt the runs.
-- [ ] `tools/verify.mjs` additions (stricter only): LICENSE file exists; README
+- [x] `tools/verify.mjs` additions (stricter only): LICENSE file exists; README
       contains no `70+`; `package.json` engines is `>=21`; `harness/relay.mjs`
       contains no `store.dispatch`; report freshness is self-consistent because
       verify's own eval gate regenerates `report.json` BEFORE the probes read it —
@@ -588,8 +588,9 @@ All doc numbers from your own fresh command output (hard rule 8):
       `tests/verify-boxes.test.mjs` for the box-counting function (extract it) —
       ordinary unchecked box counts, `(OPT)` box does not, `(VERIFY-SELF)` box
       does not.
-- [ ] (VERIFY-SELF) Full PUSH_GATE + `node tools/verify.mjs` → expect INCOMPLETE
-      only for video / Devpost / any remaining human boxes. Commit
+- [ ] (VERIFY-SELF) Full PUSH_GATE + `node tools/verify.mjs` → expect CODE_COMPLETE
+      with HUMAN-REMAINING TODO only for video / Devpost / any remaining human
+      evidence. Commit
       `remedy: consistency + metadata + verifier authority + human eval protocol (R13)` and push.
       (This box is exempt from the verifier's own count — it cannot be checked
       before the verifier that counts it passes; check it right after the push.)
@@ -627,7 +628,7 @@ gate  npm test: exit 0
 gate  --smoke: exit 0
 gate  --e2e: exit 0
 gate  eval/run.mjs: exit 0
-HUMAN-REMAINING done  ChatGPT-browser evidence (PNG + content-validated JSON)
+HUMAN-REMAINING TODO  ChatGPT-browser evidence (PNG + content-validated JSON)
 HUMAN-REMAINING done  oracle audit flipped
 HUMAN-REMAINING TODO  video recorded
 HUMAN-REMAINING TODO  Devpost submitted

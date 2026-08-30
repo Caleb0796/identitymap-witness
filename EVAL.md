@@ -21,7 +21,7 @@ confirmation, and a four-hash per-call write oracle.
 
 | suite | proves |
 |---|---|
-| fixture | 8 personas; canaries on firstName/lastName/email in EVERY source profile (okta+hris+ad); DC1–DC4 carrier personas present; P1 clean |
+| fixture | 8 personas; present identity-bearing keys use canary format; every okta profile carries identity; DC1–DC4 carrier personas present; P1 clean |
 | golden walk | `data/golden-walk.md` hand-derived table == machine recomputation later (T4 wires this cross-check) |
 | parser | SPEC §6 grammar exactly; out-of-grammar → INVALID_AST with position |
 | evaluator | priority resolution, present-but-empty wins (DC4), null poisons concat, `""` vs null equality table, ternary branch capture |
@@ -34,7 +34,8 @@ confirmation, and a four-hash per-call write oracle.
 | eval oracle | raw snapshot sections, derived-record ids, and hidden counters are own/type/coherence checked; browser SHA-256 values are recomputed; complete per-tool success/error envelopes are required; missing/fake hashes, extra state, modified old evidence, wrong returned ids, unknown tools, and allocator over/under-increments fail closed |
 | redaction | canary sweep over every tool × every persona × keys AND values AND candidates AND diffs; crafted leak in a payload KEY caught; `<redacted:changed>` on identity diffs |
 
-Gate: exit 0, 0 fail, 0 skip. Target ≥ 70 tests.
+Gate: exit 0, 0 fail, 0 skip. The real count is whatever `npm test` prints;
+risk coverage matters more than count.
 
 ## Layer 2 — registration + protocol smoke (local Chrome 152)
 
@@ -114,8 +115,9 @@ evidence id and advance shared `nextId` by one; successful prepare does the same
 for its returned packet id; read changes nothing. All unrelated sections and
 hidden counters must remain exact.
 
-Report shape:
-`{layers, scorer: {classes, witness}, ablation, oracleAudited, killLines}`;
+Report shape includes
+`{when, sha, traceFile, layers, scorer, ablation, counters, thresholds, killLines,
+oracleAudited, watermark}`;
 **refuses (exit 2) to write an un-watermarked report while `oracle.audited` is
 false** — flipping it requires the human audit commit (trailer `Oracle-Audited: yes`);
 the automated loop is forbidden to flip it (also asserted by a test that the
@@ -125,8 +127,8 @@ string stays false in loop commits — commit author check).
 
 ALL of: scorer 4/4 classes; false positives ≤ 1; witness size == 3 matching an
 oracle set; four-hash write-oracle failures = 0; failed-call full-state hash
-failures = 0; PII canary leaks = 0; layer gates all exit 0; report watermark
-`oracleAudited: true`.
+failures = 0; PII canary leaks = 0; layer gates all exit 0; report has
+`oracleAudited: true` and `watermark: null`.
 
 ## Kill / abort gates (all executable — a script can evaluate each)
 

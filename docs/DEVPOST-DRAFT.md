@@ -2,54 +2,82 @@
 
 ## What it does
 
-IdentityMap Witness is a profile-mapping workbench where the mapping draft you are
-editing — expressions, source priority, and the business invariants you just pinned —
-lives only in the page until you save. A WebMCP agent works inside that unsaved
-session through five least-privilege tools: it stages your invariants, searches a
-synthetic persona pool for the MINIMAL set of people that violate them, shows
-field-level provenance with the losing sources visible, previews fixes without
-touching your draft, and assembles a review packet that dies the moment you edit
-anything it depended on. Apply is a plain button the agent cannot press.
+Two concessions come first. Unsaved-draft preview is already a first-party product
+pattern, and another page-local agent with the same state and rules could run the
+same deterministic engine. IdentityMap Witness therefore does not claim uniqueness
+or that another integration is incapable of this work.
 
-Two things we do NOT claim, up front: draft-preview is first-party standard
-(Okta, Auth0, Adobe, DocuSign all have it), and nothing stops any page-local agent
-from running the same deterministic engine. The claim is narrower and demonstrated:
-the page AUTHORS the contract that makes agent help on dirty state safe — least
-privilege, redaction at the source, revision fencing with fingerprint-exact
-invalidation, and an auditable minimal witness.
+IdentityMap Witness demonstrates a narrower contribution: a page-authored safety
+workflow for agent help on a dirty profile-mapping draft. An agent stages three
+business invariants for review; a human visibly confirms them. The agent then uses
+five least-privilege WebMCP tools to inspect the current draft and exhaustively find
+the smallest set of synthetic personas covering every violated rule, show redacted
+field-level provenance, preview fixes without changing state, and prepare a review
+packet only from fresh evidence. Any relevant human edit invalidates the old proof.
+The agent must re-read and re-find at the new revision; Apply stays human-only.
+
+The two-copy judge path makes that authority boundary visible. Prompt 1 stops with
+the rules staged as pending at r17. A human reviews the exact canonical content and
+clicks the version-bound Confirm all control, which advances to r18. Prompt 2 begins
+by re-reading the confirmed session, then requires a fresh find after every human
+edit before a green packet can be prepared.
+
+IdentityMap Witness finds the smallest set of synthetic people proving every violated rule on an unsaved draft — and the proof dies when you edit what it depended on.
 
 ## How we built it
 
-Zero-dependency Node 20 + vanilla ES modules; one isomorphic engine (EL-subset
-parser, evaluator with candidates provenance, invariant checker, exhaustive
-minimal-witness search) shared verbatim by the page, the tests, and the ablation.
-`document.modelContext.registerTool` in the top-level document only; every tool
-returns after the UI has already rendered; payloads capped at 1500 chars; a
-canary-based PII guard is enforced in unit tests, the CDP harness, and the eval
-sweep. A custom Chrome-152 harness drives the tools BY NAME over the CDP WebMCP
-domain (page-side executeTool-by-name throws — measured) across three cold
-sessions and a 10-round relay: stale rejection, wrong-revision recovery, and a
-pin-coverage flip, all traced to committed JSON.
+The project uses dependency-free Node 21+ and vanilla ES modules. One isomorphic
+engine implements the expression subset, value and candidate provenance,
+invariant checks, and exhaustive minimal-witness search for the page, tests, and
+evaluation. Strict tool schemas reject extra or malformed input. Staging produces a
+canonical pending object; only a real human DOM event can confirm its exact version
+and content. All five tools are failure-atomic, payloads are capped at 1,500
+characters, and evidence and packets are bound to the dependencies, revision, and
+fresh ids from which they were produced.
+
+The Chrome 152 relay opens a fresh user-data directory with WebMCP enabled. Three
+cold registration sessions prove a completed five-tool round trip. A 12-round E2E
+trace drives real DOM events for confirmation, expression edits, group edits, and
+priority changes while checking stale rejection, revision recovery, hostile text,
+invalid-input atomicity, packet coverage, and a final clean sweep. The hand-derived
+oracle is marked `audited: true` and bound to commit `a575653` with an
+`Oracle-Audited: yes` trailer. The latest local eval report completed all three
+layers at exit 0, recovered all four seeded defect classes with an audited size-3
+minimal witness, and recorded zero write-oracle, failed-state-hash, and PII-canary
+failures.
 
 ## Challenges we ran into
 
-The honest evaluation was harder than the code. Our first benchmark design was
-rigged (the API arm lost only because we withheld its inputs) — an adversarial
-review caught it, so we rebuilt: the API comparison is now a labeled
-persisted-state ABLATION (0/4 session defects visible pre-save, by construction),
-the oracle was hand-derived on paper before the engine existed and stays
-watermarked UNAUDITED until a human signs a row-by-row audit commit, and the
-Browser-Use / Full-CDP arms are declared designed-not-run instead of simulated.
-Platform truths cost real measurement too: a pending tool call dies at ~22s, so
-every human step is a two-phase handshake; iframe registration silently does
-nothing; the CDP WebMCP domain reports enable-OK even when the page API is absent,
-so the only presence proof we trust is a completed round trip.
+The hardest part was making the evaluation say only what the evidence supports. An
+early comparison disadvantaged the API arm by withholding the unsaved inputs. We
+replaced it with an explicitly by-construction persisted-state ablation and stopped
+calling it a competitive benchmark. Browser-Use and Full-CDP remain documented
+designs rather than simulated results.
+
+Platform behavior also forced the interaction design. A pending WebMCP call dies
+at about 22 seconds, so confirmation cannot be a long-running tool call: staging
+returns immediately, a human confirms on the page, and the next prompt makes the
+agent re-read. Adversarial tests then exposed the less obvious edges—detached stale
+Confirm controls, wrong revisions, stale packet ids, hidden allocator drift,
+hostile rule text, invalid expressions, and present-but-empty source values. Each
+became an executable contract. The remaining model-quality evidence is deliberately
+human-run and is not claimed complete until its six pixel-backed artifacts exist.
 
 ## What's next
 
-Run the two arms we only designed; swap synthetic personas for a real
-SCIM-shaped dataset behind the same redaction contract; and test the undocumented
-admin-console preview XHR we deliberately left untested. The engine and the
-fencing pattern (fingerprinted evidence + revision-gated packets) are reusable for
-any "agent proves, human signs" surface — contract signer paths and CRM merges are
-next on the list.
+The current limits are explicit:
+
+1. The eight personas and all identity values are synthetic.
+2. Draft state and evidence are tab-local rather than durable across sessions.
+3. Exhaustive witness search is demonstrated only at the small fixture scale.
+4. No real identity provider, admin console, or save operation is connected.
+5. FNV-1a fingerprints identify canonical visible content but are not
+   cryptographic signatures.
+6. Browser-Use and Full-CDP comparative arms are designed, not run.
+
+Next steps are to run those external comparison arms, evaluate search strategies on
+larger consented datasets, integrate a real identity provider behind the same
+redaction boundary, and replace local content fingerprints with signed audit
+receipts where cross-session trust is required. The immediate submission work is
+more modest: execute the three fresh human model-evaluation scenarios, record the
+remote demo, and publish only the evidence those runs actually produce.

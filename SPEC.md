@@ -274,12 +274,14 @@ derived evidence/packets. Hints are not security. No apply/save/push tool exists
 
 ## 9. Redaction (PII_GUARD)
 
-Identity fields: `firstName`, `lastName`, `email` in EVERY source profile
-(okta/hris/ad) carry canaries `CANARY_FN_<id>` / `CANARY_LN_<id>` /
-`CANARY_EM_<id>@example.invalid`. The redaction walk covers payload keys AND
-values AND nested candidates/diffs. Any `CANARY_` substring in any tool result at
-any point = layer-1 failure + kill K2. Allowed out: persona ids, category labels,
-field names, provenance source names, booleans, and non-identity value diffs.
+Whenever identity-bearing keys `firstName`, `lastName`, or `email` are present in
+an okta/hris/ad source profile, their values use the corresponding canary format:
+`CANARY_FN_<id>` / `CANARY_LN_<id>` / `CANARY_EM_<id>@example.invalid`. Every
+okta profile carries at least `firstName`; hris/ad profiles may omit identity
+keys. The redaction walk covers payload keys AND values AND nested candidates/diffs.
+Any `CANARY_` substring in any tool result at any point = layer-1 failure + kill
+K2. Allowed out: persona ids, category labels, field names, provenance source
+names, booleans, and non-identity value diffs.
 
 ## 10. UI + deploy layout
 

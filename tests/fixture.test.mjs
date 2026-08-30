@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 const load = async (f) => JSON.parse(await readFile(new URL(`../data/${f}`, import.meta.url)));
 
-test("personas: 8, canaries in EVERY source profile, DC carriers present", async () => {
+test("personas: identity-bearing keys use canary format; okta always carries identity; DC carriers present", async () => {
   const ps = await load("personas.json");
   assert.equal(ps.length, 8);
   for (const p of ps) for (const src of ["okta", "hris", "ad"]) {
