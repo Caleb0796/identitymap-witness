@@ -21,9 +21,9 @@ test("personas: 8, canaries in EVERY source profile, DC carriers present", async
     && p.profiles.hris.department === "Finance"));                                     // DC4 carrier
 });
 
-test("oracle: unaudited, size-3 witness, violations reference the 4 classes", async () => {
+test("oracle: audited, size-3 witness, violations reference the 4 classes", async () => {
   const o = await load("oracle.json");
-  assert.equal(o.audited, false);
+  assert.equal(o.audited, true);
   assert.equal(o.minimalWitness.size, 3);
   assert.deepEqual([...new Set(o.expectedViolations.map(v => v.defectClass))].sort(),
     ["DC1", "DC2", "DC3", "DC4"]);
