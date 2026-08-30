@@ -72,6 +72,21 @@ test("every reachable failed tool result leaves the store byte-identical", async
     }, "BAD_RULE");
   });
 
+  await t.test("find: NO_INVARIANTS", () => {
+    const store = createStore(GOLDEN_STATE);
+    assertFailedAtomically(store, personas, "find_mapping_counterexample", {
+      expectedRevision: 17,
+    }, "NO_INVARIANTS");
+  });
+
+  await t.test("find: WITNESS_EXCEEDS_CAP", () => {
+    const store = createStore({ ...GOLDEN_STATE, pins: PINS });
+    assertFailedAtomically(store, personas, "find_mapping_counterexample", {
+      expectedRevision: 17,
+      maxPersonas: 2,
+    }, "WITNESS_EXCEEDS_CAP");
+  });
+
   await t.test("find: output-budget EVALUATOR_FAILED rolls back recorded evidence", () => {
     const store = createStore({ ...GOLDEN_STATE, pins: [LONG_PIN] });
     assertFailedAtomically(store, personas, "find_mapping_counterexample", {
@@ -114,15 +129,31 @@ test("every reachable failed tool result leaves the store byte-identical", async
   });
 
   await t.test("prepare: STALE_EVIDENCE", () => {
-    const store = createStore(GOLDEN_STATE);
+    const store = createStore({ ...GOLDEN_STATE, pins: PINS });
     const evidenceId = store.recordEvidence("counterexample", {
-      fields: ["group"], invariants: [], personas: ["P2"],
+      fields: ["group"], invariants: PINS.map((pin) => pin.id), personas: ["P2"],
     }, { violations: [] });
     store.dispatch({ type: "EDIT_EXPRESSION", field: "group", expr: '"changed"' });
     assertFailedAtomically(store, personas, "prepare_mapping_review", {
       expectedRevision: store.getState().revision,
       evidenceIds: [evidenceId],
     }, "STALE_EVIDENCE");
+  });
+
+  await t.test("prepare: NO_INVARIANTS", () => {
+    const store = createStore(GOLDEN_STATE);
+    assertFailedAtomically(store, personas, "prepare_mapping_review", {
+      expectedRevision: 17,
+      evidenceIds: [],
+    }, "NO_INVARIANTS");
+  });
+
+  await t.test("prepare: NO_EVIDENCE", () => {
+    const store = createStore({ ...GOLDEN_STATE, pins: PINS });
+    assertFailedAtomically(store, personas, "prepare_mapping_review", {
+      expectedRevision: 17,
+      evidenceIds: [],
+    }, "NO_EVIDENCE");
   });
 
   await t.test("prepare: output-budget EVALUATOR_FAILED rolls back its packet", () => {
@@ -138,7 +169,12 @@ test("every reachable failed tool result leaves the store byte-identical", async
   });
 
   await t.test("prepare: PII_GUARD rolls back its packet", () => {
-    const base = createStore(GOLDEN_STATE);
+    const base = createStore({ ...GOLDEN_STATE, pins: [PINS[0]] });
+    const evidenceId = base.recordEvidence("clean-sweep", {
+      fields: Object.keys(GOLDEN_STATE.expressions),
+      invariants: [PINS[0].id],
+      personas: personas.map((persona) => persona.id),
+    }, { violations: [] });
     const store = {
       ...base,
       recordPacket(...args) {
@@ -148,7 +184,7 @@ test("every reachable failed tool result leaves the store byte-identical", async
     };
     assertFailedAtomically(store, personas, "prepare_mapping_review", {
       expectedRevision: 17,
-      evidenceIds: [],
+      evidenceIds: [evidenceId],
     }, "PII_GUARD");
   });
 

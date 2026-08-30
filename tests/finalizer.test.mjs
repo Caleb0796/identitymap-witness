@@ -106,9 +106,9 @@ test("every tool's reachable error envelopes cross the unified finalizer", async
       label: "prepare: STALE_EVIDENCE",
       code: "STALE_EVIDENCE",
       run: () => {
-        const store = createStore(GOLDEN_STATE);
+        const store = createStore({ ...GOLDEN_STATE, pins: [PINS[0]] });
         const evidenceId = store.recordEvidence("counterexample", {
-          fields: ["group"], invariants: [], personas: ["P2"],
+          fields: ["group"], invariants: [PINS[0].id], personas: ["P2"],
         }, { violations: [] });
         store.dispatch({ type: "EDIT_EXPRESSION", field: "group", expr: '"changed"' });
         return runTool(store, personas, "prepare_mapping_review", {
@@ -134,7 +134,12 @@ test("every tool's reachable error envelopes cross the unified finalizer", async
       label: "prepare: PII_GUARD",
       code: "PII_GUARD",
       run: () => {
-        const base = createStore(GOLDEN_STATE);
+        const base = createStore({ ...GOLDEN_STATE, pins: [PINS[0]] });
+        const evidenceId = base.recordEvidence("clean-sweep", {
+          fields: Object.keys(GOLDEN_STATE.expressions),
+          invariants: [PINS[0].id],
+          personas: personas.map((persona) => persona.id),
+        }, { violations: [] });
         const store = {
           ...base,
           recordPacket(...args) {
@@ -143,7 +148,7 @@ test("every tool's reachable error envelopes cross the unified finalizer", async
           },
         };
         return runTool(store, personas, "prepare_mapping_review", {
-          expectedRevision: 17, evidenceIds: [],
+          expectedRevision: 17, evidenceIds: [evidenceId],
         });
       },
     },
@@ -189,9 +194,9 @@ test("caller-controlled error details are redacted or replaced as a whole", asyn
   });
 
   await t.test("oversized staleIds keeps STALE_EVIDENCE and withholds the entire detail", () => {
-    const store = createStore(GOLDEN_STATE);
+    const store = createStore({ ...GOLDEN_STATE, pins: [PINS[0]] });
     const evidenceIds = Array.from({ length: 400 }, () => store.recordEvidence("counterexample", {
-      fields: ["group"], invariants: [], personas: ["P2"],
+      fields: ["group"], invariants: [PINS[0].id], personas: ["P2"],
     }, { violations: [] }));
     store.dispatch({ type: "EDIT_EXPRESSION", field: "group", expr: '"changed"' });
     const result = runTool(store, personas, "prepare_mapping_review", {

@@ -256,7 +256,7 @@ honest: `readOnlyHint:true` ONLY on `read_mapping_session` (find/preview/prepare
 record evidence/packets); add `untrustedContentHint: true` to all five (outputs
 carry human-authored expressions and profile-derived strings).
 
-- [ ] Step 1: failing tests `tests/validate.test.mjs`: the review's exact ghost repro
+- [x] Step 1: failing tests `tests/validate.test.mjs`: the review's exact ghost repro
       (`null_if_missing {field:"ghost",dependsOn:"ghost"}` → BAD_RULE, state
       unchanged, and a subsequent find reports no coverage for it); unknown source;
       wrong type; empty id; duplicate ids; extra key; non-string values;
@@ -265,13 +265,13 @@ carry human-authored expressions and profile-derived strings).
       NO_INVARIANTS; empty evidenceIds → NO_EVIDENCE; maxPersonas 0 / -1 / 1.5 / 9 →
       BAD_RULE; maxPersonas 2 with the golden 3-witness → WITNESS_EXCEEDS_CAP;
       maxPersonas 3 → ok.
-- [ ] Step 2: failing test `tests/annotations.test.mjs`: table-driven assert of the
+- [x] Step 2: failing test `tests/annotations.test.mjs`: table-driven assert of the
       exact annotations object per tool (readOnlyHint map + untrustedContentHint all
       true) and that `stage`'s schema has `additionalProperties:false` in every branch.
-- [ ] Step 3: implement (a)–(d). `npm test` + smoke + e2e green (smoke's PINS are
+- [x] Step 3: implement (a)–(d). `npm test` + smoke + e2e green (smoke's PINS are
       valid and must still pass — if an assertion breaks, the fixture pins are the
       spec, not the validator).
-- [ ] Step 4: SPEC §5/§7 updated. Commit `remedy: fail-closed validation + honest annotations (R4)`.
+- [x] Step 4: SPEC §5/§7 updated. Commit `remedy: fail-closed validation + honest annotations (R4)`.
 
 ### R5 — packet freshness: GREEN dies on the next relevant edit
 

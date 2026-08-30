@@ -7,7 +7,10 @@ gpt-5.6-sol adversarial review (`reviews/codex-sol-2026-08-29.md`): direction cu
 defective-by-design golden draft, full tool schemas, fingerprint invalidation,
 honest eval relabeling. r4 changelog — R1: clean sweeps are successful results,
 with explicit checked scope and full-sweep-gated global all-clear UI; R2: every
-failed tool result restores byte-identical store state, including its id allocator.
+failed tool result restores byte-identical store state, including its id allocator;
+R4: invariant validation and tool schemas fail closed, empty sessions cannot turn
+green, witness caps are enforced, and annotations disclose derived-state writes
+and untrusted output.
 
 ## 1. One line
 
@@ -103,6 +106,15 @@ Minimal witness over violated invariants: size **3** — `[P2,P3,P4]` or `[P2,P3
 ]
 ```
 
+Every submitted invariant set has 1–8 rules. Each rule has exactly the keys shown
+for its type plus optional `id`; resolved IDs (`id` or `pin-N`) are non-empty and
+unique. `field` is one of `displayName`, `group`, `managerId`, `department`, or
+`email`; `source` is one of `okta`, `hris`, or `ad`; all other rule values are
+non-empty strings. Extra keys, wrong value types, and any string containing the
+reserved `CANARY_` prefix fail `BAD_RULE` before pins are replaced. The checker
+also fails `BAD_RULE` if an invariant's referenced output field is absent, even
+though strict staging makes that state unreachable through the tool.
+
 Semantics (`src/engine/invariants.mjs`):
 - `forbidden_group`: persona.category matches (case-insensitive) ⇒ mapped group value
   must not equal `group` (case-insensitive compare — the CHECKER is case-robust; the
@@ -138,26 +150,32 @@ Semantics:
 ## 7. Tools — complete contracts (5, top-level, no more)
 
 Common rules: input `expectedRevision` required on every tool except
-`read_mapping_session`; on mismatch → error `REVISION_MISMATCH` with
-`{currentRevision}`. Every success payload includes `revision`. One text content
-item; `JSON.stringify(payload).length <= 1500` (over-budget → violations trimmed to
-ids-only and the list capped to fit, with `truncated:true` + `violationsTotal`;
-irreducibly over → `EVALUATOR_FAILED`). UI renders BEFORE return.
-`annotations: {readOnlyHint}` as listed — hints, not security. No apply/save/push
-tool exists.
+`read_mapping_session`; it is a nonnegative integer, and a mismatch takes
+precedence over later handler validation → error `REVISION_MISMATCH` with
+`{currentRevision}`. Tool object schemas reject additional properties. Every
+success payload includes `revision`. One text content item;
+`JSON.stringify(payload).length <= 1500` (over-budget → violations trimmed to ids-only
+and the list capped to fit, with `truncated:true` + `violationsTotal`; irreducibly
+over → `EVALUATOR_FAILED`). UI renders BEFORE return. Every tool has
+`untrustedContentHint:true`; only `read_mapping_session` has `readOnlyHint:true`.
+The other four use `readOnlyHint:false` because they replace pins or record
+derived evidence/packets. Hints are not security. No apply/save/push tool exists.
 
 **read_mapping_session** (readOnly true)
 - in: `{}` — out: `{revision, priority, fields: [{field, expr, defectFree: null}], pinIds: [string], personaCount}`
   (`defectFree` is always null — the page never grades itself; the agent judges.)
 
 **stage_mapping_invariants** (readOnly false — pins only)
-- in: `{expectedRevision, invariants: [{id?, type, ...perTypeFields}]}` (≤8)
+- in: `{expectedRevision, invariants: [{id?, type, ...perTypeFields}]}` (1–8), with
+  a strict `oneOf` schema for the three exact §5 shapes.
 - REPLACES the full pin set atomically (append semantics rejected — resubmit the
-  whole set; simplest deterministic rule). Unknown type / missing per-type field →
-  `BAD_RULE {reason}`. out: `{revision, pinIds}` (revision has bumped by 1).
+  whole set; simplest deterministic rule). Any §5 validation failure →
+  `BAD_RULE {reason}` before dispatch. out: `{revision, pinIds}` (revision has
+  bumped by 1).
 
-**find_mapping_counterexample** (readOnly true — records evidence, no draft change)
-- in: `{expectedRevision, invariantIds: [string], maxPersonas?: number<=8}`
+**find_mapping_counterexample** (readOnly false — records evidence, no draft change)
+- in: `{expectedRevision, invariantIds: [string], maxPersonas?: integer}` where
+  `maxPersonas` is 1–8.
 - Evaluates ALL personas × ALL expressions, checks the named pins, exhaustive
   minimal witness (2^8 subsets max). A violating success returns `{revision,
   cleanSweep:false, fullSweep, checkedInvariantIds, personaIds, violations:
@@ -171,9 +189,13 @@ tool exists.
   matrix or presents a global all-clear; only `cleanSweep && fullSweep` renders
   `clean sweep — 0 violations across {checked} personas at r{revision}`. The
   `NO_COUNTEREXAMPLE` error code no longer exists. Unknown pin id → `BAD_RULE`.
-  Engine throw → `EVALUATOR_FAILED`.
+  Invalid `maxPersonas` → `BAD_RULE`; an effective checked pin set of zero →
+  `NO_INVARIANTS` with reason “no pinned invariants — ask the human to pin business
+  rules first” and no evidence; a minimal witness larger than `maxPersonas` →
+  `WITNESS_EXCEEDS_CAP {witnessSize,maxPersonas}` without evidence. Engine throw
+  → `EVALUATOR_FAILED`.
 
-**preview_mapping_patch** (readOnly true — records evidence, DOES NOT edit the draft)
+**preview_mapping_patch** (readOnly false — records evidence, DOES NOT edit the draft)
 - in: `{expectedRevision, field, expr, personaIds: [string]}`
 - Parses `expr` (→ `INVALID_AST {position}`), evaluates ONLY the named personas
   under draft-with-patch-overlaid, re-checks all pins on the patched field.
@@ -182,9 +204,12 @@ tool exists.
   `UNKNOWN_PERSONA`. The human applies the patch by editing the UI themselves —
   the tool never writes the draft (that keeps the human the author of every edit).
 
-**prepare_mapping_review** (readOnly true — records a packet)
+**prepare_mapping_review** (readOnly false — records a packet)
 - in: `{expectedRevision, evidenceIds: [string]}`
-- Fails `STALE_EVIDENCE {staleIds}` if ANY referenced evidence is stale.
+- With zero pinned invariants, fails `NO_INVARIANTS`; otherwise an empty
+  `evidenceIds` array fails `NO_EVIDENCE`. These gates precede evidence lookup and
+  packet assembly. Fails `STALE_EVIDENCE {staleIds}` if ANY referenced evidence
+  is stale.
   Packet-green rule (r3, run2 safety fix): only CLOSING evidence — kinds
   `counterexample` and `clean-sweep`, which assert on the CURRENT draft — counts
   toward coverage; `patch-preview` evidence is hypothetical and can never close a

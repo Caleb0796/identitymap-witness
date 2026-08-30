@@ -18,6 +18,14 @@ test("canary in an object KEY is scrubbed too", () => {
   assert.deepEqual(Object.keys(p), ["<redacted>"]);
 });
 
+test("dynamic __proto__ keys survive redaction as own JSON properties", () => {
+  const input = Object.fromEntries([["__proto__", { clean: "Engineering" }]]);
+  const p = redactPayload(input);
+  assert.equal(Object.hasOwn(p, "__proto__"), true);
+  assert.deepEqual(p.__proto__, { clean: "Engineering" });
+  assert.equal(JSON.stringify(p), '{"__proto__":{"clean":"Engineering"}}');
+});
+
 test("identity field names force diff redaction regardless of value", () => {
   const p = redactPayload({ diffs: [{ personaId: "P2", field: "email", before: "a@b.c", after: "d@e.f" }] });
   assert.equal(p.diffs[0].before, "<redacted:changed>");

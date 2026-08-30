@@ -9,18 +9,15 @@ export function redactPayload(value) {
   if (typeof value === "string") return hit(value) ? "<redacted>" : value;
   if (Array.isArray(value)) return value.map(redactPayload);
   if (value && typeof value === "object") {
-    const out = {};
     const isDiff = "before" in value && "after" in value;
     const diffField = isDiff ? (value.field ?? null) : null;
-    for (const [k, v] of Object.entries(value)) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => {
       const key = hit(k) ? "<redacted>" : k;
       if (isDiff && (k === "before" || k === "after") && (diffField === null || IDENTITY_FIELDS.has(diffField))) {
-        out[key] = "<redacted:changed>";
-      } else {
-        out[key] = redactPayload(v);
+        return [key, "<redacted:changed>"];
       }
-    }
-    return out;
+      return [key, redactPayload(v)];
+    }));
   }
   return value;
 }
