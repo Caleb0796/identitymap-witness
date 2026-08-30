@@ -44,6 +44,14 @@ This file intentionally does not mark human work complete.
       revision, and finish on a fresh GREEN packet without Apply. Record the final
       filename and duration in `evidence/video-final.txt`.
 
+- [ ] **Freeze evidence commit (before flipping public).** `eval/out/` is
+      gitignored, but README links `eval/out/report.json`. From the final code
+      commit run `node tools/verify.mjs` (green), then commit ONE fresh pair with
+      `git add -f eval/out/report.json eval/out/relay-$(git rev-parse --short HEAD).json`
+      in an evidence-only commit whose diff touches nothing but `eval/out/`
+      (message prefix `evidence:`). Without this, the README report link 404s on
+      the public repository.
+
 - [ ] **Public repository and submission.** Verify the MIT [`LICENSE`](../LICENSE),
       make the repository public, submit the live URL, video, repository, and the
       four current answers from [`docs/DEVPOST-DRAFT.md`](DEVPOST-DRAFT.md), then
