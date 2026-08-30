@@ -495,10 +495,10 @@ the ban is on mutating through it.
 (E3's fingerprint holds only the three original pin ids, so the added-then-removed
 `pin-extra` never stales it — same logic as today's round 10.)
 
-- [ ] Step 1: guard test `tests/harness-discipline.test.mjs`: read
+- [x] Step 1: guard test `tests/harness-discipline.test.mjs`: read
       `harness/relay.mjs` as text and assert zero occurrences of `store.dispatch`
       and zero of `__imw.render()` (rendering happens via the page's own listeners).
-- [ ] Step 2: rewrite the human steps to the table above; full e2e green.
+- [x] Step 2: rewrite the human steps to the table above; full e2e green.
       Commit `remedy: E2E humans act through the DOM (R9)`.
 
 ### R10 — judge mode: 30-second path on first paint

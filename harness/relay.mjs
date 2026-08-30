@@ -175,12 +175,6 @@ async function e2e(baseUrl) {
     if (text?.includes("CANARY_")) throw new Error(`round ${round}: canary leak`);
     return { r, p: text ? JSON.parse(text) : null };
   };
-  const human = async (round, action) => {
-    const rev = await s.evalJs(
-      `window.__imw.store.dispatch(${JSON.stringify(action)}); window.__imw.render(); window.__imw.store.getState().revision`);
-    trace.push({ round, kind: "human-sim", action, revisionAfter: rev });
-    return rev;
-  };
   const humanExpression = async (round, field, expr) => {
     const selector = `#grid input[data-field="${field}"]`;
     const result = await s.evalJs(`(() => {
@@ -199,7 +193,7 @@ async function e2e(baseUrl) {
         errorText: error.textContent,
       };
     })()`);
-    trace.push({ round, kind: "human-dom", via: "dom-change",
+    trace.push({ round, kind: "human-dom", via: "dom-change", selector,
       action: { type: "EDIT_EXPRESSION", field, expr }, ...result });
     return result;
   };
@@ -285,6 +279,8 @@ async function e2e(baseUrl) {
     assertEq(staleConfirm.pinCount, 0, "round2 stale confirm applies no pins");
     assertEq(staleConfirm.currentButtonVersion, 2, "round2 re-render keeps current version");
     assertEq(staleConfirm.error.includes("STALE_CONFIRM"), true, "round2 stale confirm is visible");
+    trace.push({ round: 2, kind: "human-dom", via: "click", selector: "#confirm-pending",
+      detached: true, renderedVersion: 1, revisionAfter: staleConfirm.revision });
     const stagedA11y = await s.evalJs(`({
       controlsNamed: [...document.querySelectorAll("input, select, button")].every((control) =>
         Boolean(control.getAttribute("aria-label") || control.labels?.length || control.textContent.trim())),
@@ -306,8 +302,9 @@ async function e2e(baseUrl) {
     assertEq(r3.p.personaIds, ["P2", "P3", "P4"], "round3 witness");
     const E1 = r3.p.evidenceIds;
     // 4 human fixes managerId (r19); E1 must go stale — and only via fingerprint
-    const rev4 = await human(4, { type: "EDIT_EXPRESSION", field: "managerId", expr: "user.managerId" });
-    assertEq(rev4, 19, "round4 revision");
+    const manager4 = await humanExpression(4, "managerId", "user.managerId");
+    assertEq(manager4.revisionAfter, 19, "round4 revision");
+    assertEq(manager4.expressionAfter, "user.managerId", "round4 managerId expression");
     const e1stale = await s.evalJs(`window.__imw.store.getState().evidence[${JSON.stringify(E1[0])}].stale`);
     assertEq(e1stale, true, "round4 E1 stale");
     // 5 prepare over stale E1 MUST fail
@@ -328,7 +325,9 @@ async function e2e(baseUrl) {
     const rev7 = await s.evalJs("window.__imw.store.getState().revision");
     assertEq(rev7, 19, "round7 preview must not bump revision");
     // 8 human applies group fix (r20) + real priority control (r21); clean sweep → green packet
-    await human(8, { type: "EDIT_EXPRESSION", field: "group", expr: 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"' });
+    const group8 = await humanExpression(8, "group", 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"');
+    assertEq(group8.revisionAfter, 20, "round8 group revision");
+    assertEq(group8.expressionAfter, 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"', "round8 group expression");
     const priority8 = await humanPriority(8, ["hris", "ad"]);
     assertEq(priority8.revisionAfter, 21, "round8 revision");
     assertEq(priority8.priorityAfter, ["hris", "ad"], "round8 priority committed through select");

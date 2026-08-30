@@ -57,15 +57,16 @@ Gate: exit 0.
    at r17; clicking the detached v1 control yields visible `STALE_CONFIRM` and
    leaves v2 untouched; real-DOM Confirm all → r18
 3. find_mapping_counterexample → witness {P2,P3,P4}, evidence recorded
-4. HUMAN-SIM: `window.__imw.store.dispatch(EDIT_EXPRESSION managerId fix)` via
-   Runtime.evaluate → r19; assert find-evidence stale
+4. real-DOM change on `#grid input[data-field="managerId"]` applies the managerId
+   fix → r19; assert find-evidence stale
 5. prepare_mapping_review(old ids) → MUST fail STALE_EVIDENCE
 6. re-find → fresh evidence; violations no longer include P3/inv-null
 7. preview_mapping_patch on `group` fix over {P2} → diff redacted-clean
-8. HUMAN-SIM applies the group fix, then a real-DOM change on the labeled priority
-   selector applies `hris → ad → okta` → r21; assert every prior evidence record is
-   stale and the stale banner is visible; re-find returns a successful full clean
-   sweep carrying a fresh evidence id → prepare over that id → packet `blockers:[]`
+8. a real-DOM change on `#grid input[data-field="group"]` applies the group fix →
+   r20, then a real-DOM change on the labeled priority selector applies
+   `hris → ad → okta` → r21; assert every prior evidence record is stale and the
+   stale banner is visible; re-find returns a successful full clean sweep carrying
+   a fresh evidence id → prepare over that id → packet `blockers:[]`
 9. recovery: wrong expectedRevision → REVISION_MISMATCH → corrected retry succeeds
 10. stage a 4th trivial rule at r21 → real-DOM Confirm all → r22; old packet is
     incomplete-by-coverage (blocker `uncovered`); stage the original 3 at r22 →
@@ -76,7 +77,8 @@ Gate: exit 0.
     at r25, inline position error visible, matrix and GREEN packet intact; a valid
     `user.managerId` commits exactly once → r26.
 Trace records every invocationId/status/payload/ms plus `snapshotBefore/After`,
-full-state SHA-256 before/after, and authoritative-slice SHA-256 before/after →
+full-state SHA-256 before/after, and authoritative-slice SHA-256 before/after;
+every scripted human action is labeled `human-dom` with its page selector →
 `eval/out/relay-<sha>.json`.
 Gate: exit 0 AND rounds 5, 9, 10 each show their failure/recovery pair; round 12
 shows invalid-input no-op and valid-input commit.
