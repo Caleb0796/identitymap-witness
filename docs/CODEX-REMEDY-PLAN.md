@@ -291,17 +291,17 @@ freshness on every render: stale ⇒ packet panel shows
 `recordPacket`: `pinsCovered` must contain only pins with `coverage === true`
 (today it stores `Object.keys(coverage)`, `defs.mjs:148`).
 
-- [ ] Step 1: failing unit test `tests/packet-freshness.test.mjs`: build GREEN packet →
+- [x] Step 1: failing unit test `tests/packet-freshness.test.mjs`: build GREEN packet →
       one EDIT_EXPRESSION → `packetFresh` false; also priority change, pin content
       change (same id), and unpin each kill it; a fresh find+prepare afterwards is
       fresh again; `pinsCovered` excludes uncovered pins. (Export `packetFresh`
       from a browser-safe module so app.js and tests share one definition.)
-- [ ] Step 2: new e2e round in `relay.mjs` (constants in R9's table): after the
+- [x] Step 2: new e2e round in `relay.mjs` (constants in R9's table): after the
       GREEN packet, human-edit an expression via the real `#grid input` change
       event driven through `Runtime.evaluate` (NOT `store.dispatch`), assert via
       DOM: packet panel text contains `STALE` and `#apply` is disabled; then
       re-fix + re-find + re-prepare → GREEN again, `#apply` enabled.
-- [ ] Step 3: SPEC §8 freshness clause. `npm test` + e2e green.
+- [x] Step 3: SPEC §8 freshness clause. `npm test` + e2e green.
       Commit `remedy: packet freshness — GREEN dies on edit (R5)`.
 
 ### R6 — eval binds to the trace this run wrote; per-call state capture

@@ -10,7 +10,8 @@ with explicit checked scope and full-sweep-gated global all-clear UI; R2: every
 failed tool result restores byte-identical store state, including its id allocator;
 R4: invariant validation and tool schemas fail closed, empty sessions cannot turn
 green, witness caps are enforced, and annotations disclose derived-state writes
-and untrusted output.
+and untrusted output; R5: review packets carry their evidence ids and become stale
+after the next relevant session edit, disabling Apply until fresh evidence is prepared.
 
 ## 1. One line
 
@@ -217,8 +218,10 @@ derived evidence/packets. Hints are not security. No apply/save/push tool exists
   fingerprints AND no violation remains un-resolved in the newest closing
   evidence per pin → `blockers: []`; otherwise blockers list
   `{pin, reason: "uncovered"|"violating"}`. `PII_GUARD` if the canary sweep of the
-  assembled packet trips. out: `{revision, packetId, coverage, blockers}`.
-  Apply (plain UI) enables ONLY on `blockers: []` — and stays unused in the demo.
+  assembled packet trips. out: `{revision, packetId, coverage, blockers, evidenceIds}`.
+  Stored `pinsCovered` contains exactly the pin ids whose coverage value is `true`.
+  Apply (plain UI) enables ONLY when this packet is fresh and `blockers: []` — and
+  stays unused in the demo.
 
 ## 8. Store semantics (fingerprints, not vibes)
 
@@ -229,6 +232,12 @@ derived evidence/packets. Hints are not security. No apply/save/push tool exists
   allocator on entry. Every final `ok:false` restores that snapshot by rebinding
   the state, so `revision`, `pins`, `evidence`, `packets`, and the next allocated
   evidence or packet id are exactly as they were before the call.
+- Packet freshness is derived on every render: `packetFresh(pkt, state)` is true
+  exactly when `pkt.revision === state.revision` and every id in
+  `pkt.evidenceIds` exists in `state.evidence` and is not stale. Packet UI status
+  precedence is STALE, then BLOCKED, then GREEN; only a fresh GREEN packet enables
+  Apply. A fresh `find_mapping_counterexample` + `prepare_mapping_review` after a
+  repair creates a fresh packet again.
 - Evidence fingerprint (recorded at creation):
   `{fields: [every field evaluated], invariants: [every pin checked], personas: [every persona evaluated]}`
   — for `find_…` that is ALL fields × named pins × all personas; for `preview_…`

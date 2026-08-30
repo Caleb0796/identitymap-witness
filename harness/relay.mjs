@@ -115,6 +115,22 @@ async function e2e(baseUrl) {
     trace.push({ round, kind: "human-sim", action, revisionAfter: rev });
     return rev;
   };
+  const humanExpression = async (round, field, expr) => {
+    const selector = `#grid input[data-field="${field}"]`;
+    const result = await s.evalJs(`(() => {
+      const input = document.querySelector(${JSON.stringify(selector)});
+      if (!input) throw new Error(${JSON.stringify(`missing ${selector}`)});
+      input.value = ${JSON.stringify(expr)};
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return {
+        revisionAfter: window.__imw.store.getState().revision,
+        expressionAfter: window.__imw.store.getState().expressions[${JSON.stringify(field)}],
+      };
+    })()`);
+    trace.push({ round, kind: "human-sim", via: "dom-change",
+      action: { type: "EDIT_EXPRESSION", field, expr }, ...result });
+    return result;
+  };
   try {
     // 1 read → r17
     const r1 = await call(1, "read_mapping_session", {});
@@ -175,18 +191,72 @@ async function e2e(baseUrl) {
     assertEq(r10.p.revision, 22, "round10 revision");
     const e3fresh = await s.evalJs(`window.__imw.store.getState().evidence[${JSON.stringify(E3[0])}].stale`);
     assertEq(e3fresh, false, "round10 clean-sweep evidence survives an ADDED pin (fingerprint untouched)");
+    const stale10a = await s.evalJs(`({
+      text: document.querySelector("#packet-state").textContent,
+      applyDisabled: document.querySelector("#apply").disabled,
+    })`);
+    assertEq(stale10a.text.includes("STALE"), true, "round10 revision-only stale packet text");
+    assertEq(stale10a.applyDisabled, true, "round10 revision-only stale disables apply");
     const r10b = await call(10, "prepare_mapping_review", { expectedRevision: 22, evidenceIds: E3 });
     assertEq(r10b.p.blockers, [{ pin: "pin-extra", reason: "uncovered" }], "round10 uncovered blocker");
+    const blocked10 = await s.evalJs(`({
+      text: document.querySelector("#packet-state").textContent,
+      applyDisabled: document.querySelector("#apply").disabled,
+    })`);
+    assertEq(blocked10.text.includes("BLOCKED"), true, "round10 fresh blocked packet text");
+    assertEq(blocked10.applyDisabled, true, "round10 fresh blocked disables apply");
     const r10c = await call(10, "stage_mapping_invariants", { expectedRevision: 22, invariants: PINS });
     assertEq(r10c.p.revision, 23, "round10 unpin revision");
+    const stale10c = await s.evalJs(`({
+      text: document.querySelector("#packet-state").textContent,
+      applyDisabled: document.querySelector("#apply").disabled,
+    })`);
+    assertEq(stale10c.text.includes("STALE"), true, "round10 stale overrides blocked text");
+    assertEq(stale10c.text.includes("BLOCKED"), false, "round10 stale precedes blocked");
+    assertEq(stale10c.applyDisabled, true, "round10 stale blocked packet disables apply");
     const r10d = await call(10, "prepare_mapping_review", { expectedRevision: 23, evidenceIds: E3 });
     assertEq(r10d.p.blockers, [], "round10 green after unpin");
+    const green10 = await s.evalJs(`({
+      text: document.querySelector("#packet-state").textContent,
+      applyDisabled: document.querySelector("#apply").disabled,
+    })`);
+    assertEq(green10.text.includes("GREEN"), true, "round10 fresh green packet text");
+    assertEq(green10.applyDisabled, false, "round10 fresh green enables apply");
+
+    // 11 a real grid change stales GREEN; a real repair + fresh evidence restores it
+    const broken = await humanExpression(11, "managerId", 'user.managerId == null ? "" : user.managerId');
+    assertEq(broken.revisionAfter, 24, "round11 broken revision");
+    assertEq(broken.expressionAfter, 'user.managerId == null ? "" : user.managerId', "round11 broken expression");
+    const stale11 = await s.evalJs(`({
+      text: document.querySelector("#packet-state").textContent,
+      applyDisabled: document.querySelector("#apply").disabled,
+    })`);
+    assertEq(stale11.text.includes("STALE"), true, "round11 stale packet text");
+    assertEq(stale11.applyDisabled, true, "round11 stale packet disables apply");
+
+    const repaired = await humanExpression(11, "managerId", "user.managerId");
+    assertEq(repaired.revisionAfter, 25, "round11 repaired revision");
+    assertEq(repaired.expressionAfter, "user.managerId", "round11 repaired expression");
+    const r11 = await call(11, "find_mapping_counterexample", { expectedRevision: 25 });
+    assertEq(r11.p.cleanSweep, true, "round11 repaired clean sweep");
+    assertEq(r11.p.fullSweep, true, "round11 repaired full sweep");
+    const r11b = await call(11, "prepare_mapping_review", {
+      expectedRevision: 25,
+      evidenceIds: r11.p.evidenceIds,
+    });
+    assertEq(r11b.p.blockers, [], "round11 recovered packet green");
+    const green11 = await s.evalJs(`({
+      text: document.querySelector("#packet-state").textContent,
+      applyDisabled: document.querySelector("#apply").disabled,
+    })`);
+    assertEq(green11.text.includes("GREEN"), true, "round11 recovered packet text");
+    assertEq(green11.applyDisabled, false, "round11 recovered packet enables apply");
 
     const sha = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
     const out = `eval/out/relay-${sha}.json`;
     await writeFile(new URL(`../${out}`, import.meta.url),
-      JSON.stringify({ sha, when: new Date().toISOString(), rounds: 10, trace }, null, 2));
-    ok(`e2e: 10 rounds green — stale rejection (r5), mismatch recovery (r9), pin-coverage flip (r10); trace → ${out}`);
+      JSON.stringify({ sha, when: new Date().toISOString(), rounds: 11, trace }, null, 2));
+    ok(`e2e: 11 rounds green — stale rejection (r5), mismatch recovery (r9), pin-coverage flip (r10), packet freshness recovery (r11); trace → ${out}`);
   } finally {
     s.cdp.close();
     await s.chrome.close();
@@ -201,7 +271,7 @@ try {
     console.log("SMOKE PASS (3 cold sessions)");
   } else if (MODE === "--e2e") {
     await e2e(baseUrl);
-    console.log("E2E PASS (10 rounds)");
+    console.log("E2E PASS (11 rounds)");
   } else {
     fail(`unknown mode ${MODE}`);
   }

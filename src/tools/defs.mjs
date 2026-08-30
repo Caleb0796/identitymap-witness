@@ -164,8 +164,9 @@ const HANDLERS = {
     const packet = { revision: s.revision, coverage, blockers, evidenceIds: ids };
     try { assertNoCanary(redactPayload(packet)); }
     catch (e) { return failure("PII_GUARD", { reason: e.message }); }
-    const packetId = store.recordPacket(ids, Object.keys(coverage), blockers);
-    return { ok: true, payload: { revision: s.revision, packetId, coverage, blockers } };
+    const pinsCovered = coverageEntries.filter(([, covered]) => covered === true).map(([id]) => id);
+    const packetId = store.recordPacket(ids, pinsCovered, blockers);
+    return { ok: true, payload: { revision: s.revision, packetId, coverage, blockers, evidenceIds: ids } };
   },
 };
 

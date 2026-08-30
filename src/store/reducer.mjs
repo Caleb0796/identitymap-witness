@@ -1,6 +1,12 @@
 // Session store — SPEC.md r2 §8. Mutations bump revision and stale-mark evidence
 // by recorded fingerprint; derived records (evidence, packets) never bump.
 
+export function packetFresh(pkt, state) {
+  return pkt.revision === state.revision
+    && pkt.evidenceIds.every((id) =>
+      Object.prototype.hasOwnProperty.call(state.evidence, id) && !state.evidence[id].stale);
+}
+
 export function createStore(initial) {
   let state = structuredClone(initial);
   let nextId = 0;

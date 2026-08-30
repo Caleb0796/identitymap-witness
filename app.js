@@ -1,6 +1,6 @@
 // Top-level entry module — the ONLY legal registerTool call site (tests/toplevel.test.mjs).
 import { TOOLS, runTool, GOLDEN_STATE } from "./src/tools/defs.mjs";
-import { createStore } from "./src/store/reducer.mjs";
+import { createStore, packetFresh } from "./src/store/reducer.mjs";
 import { evaluateAll } from "./src/engine/witness.mjs";
 
 const personas = await fetch("./data/personas.json").then((r) => r.json());
@@ -101,10 +101,14 @@ function render() {
   renderRail(outs);
 
   const pkt = ui.lastPacket;
+  const fresh = pkt && packetFresh(pkt, s);
   const ps = $("#packet-state");
   ps.classList.remove("green", "blocked");
   if (pkt) {
-    if (pkt.blockers.length) {
+    if (!fresh) {
+      ps.textContent = `packet ${pkt.packetId} @ r${pkt.revision}: STALE — the draft changed after this packet was prepared`;
+      ps.classList.add("blocked");
+    } else if (pkt.blockers.length) {
       ps.textContent = `packet ${pkt.packetId} @ r${pkt.revision}: BLOCKED — ${pkt.blockers.map((b) => `${b.pin}:${b.reason}`).join(", ")}`;
       ps.classList.add("blocked");
     } else {
@@ -114,7 +118,7 @@ function render() {
   } else {
     ps.textContent = "no packet";
   }
-  $("#apply").disabled = !(pkt && pkt.blockers.length === 0);
+  $("#apply").disabled = !(fresh && pkt.blockers.length === 0);
 }
 
 const present = typeof document.modelContext !== "undefined" && document.modelContext !== null;
