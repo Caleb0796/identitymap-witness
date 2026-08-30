@@ -6,10 +6,13 @@
 // Exit 2: everything else passes but oracle.audited is false (watermarked report).
 // Exit 1: any threshold or layer fails.
 import { execSync } from "node:child_process";
-import { writeFile, readFile } from "node:fs/promises";
-import { score } from "./scorer.mjs";
+import { writeFile, readFile, stat } from "node:fs/promises";
+import { scoreTrace } from "./scorer.mjs";
 import { ablate } from "./ablation.mjs";
 
+const t0 = Date.now();
+const sha = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+const tracePath = `eval/out/relay-${sha}.json`;
 const layers = {};
 function gate(name, cmd) {
   try {
@@ -24,12 +27,27 @@ gate("unit", "npm test");
 gate("smoke", "node harness/relay.mjs --smoke");
 gate("e2e", "node harness/relay.mjs --e2e");
 
-const scorer = await score();          // reads the trace the fresh e2e just wrote
+let traceDocument;
+try {
+  const traceStat = await stat(tracePath);
+  if (traceStat.mtimeMs <= t0)
+    throw new Error(`${tracePath} mtime ${traceStat.mtimeMs} is not newer than run start ${t0}`);
+  traceDocument = JSON.parse(await readFile(tracePath, "utf8"));
+  const currentSha = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+  if (traceDocument.sha !== sha || currentSha !== sha)
+    throw new Error(`sha mismatch: trace ${JSON.stringify(traceDocument.sha)}, report ${sha}, current HEAD ${currentSha}`);
+} catch (e) {
+  const detail = e.code === "ENOENT" ? `missing ${tracePath}` : String(e.message ?? e);
+  console.error(`FAIL fresh trace binding: ${detail}`);
+  process.exit(1);
+}
+
+const scorer = await scoreTrace(traceDocument, tracePath, sha);
 const ablation = await ablate();
 
 // stale-mutation / unauthorized-write sweep over the fresh trace: the ONLY tool
 // allowed to change the revision is stage_mapping_invariants (+1 exactly).
-const { trace } = JSON.parse(await readFile(new URL(`../${scorer.traceFile}`, import.meta.url)));
+const { trace } = traceDocument;
 let unauthorizedWrites = 0;
 let lastRev = null;
 for (const t of trace) {
@@ -42,6 +60,13 @@ for (const t of trace) {
   lastRev = rev;
 }
 const piiLeaks = JSON.stringify(trace).includes("CANARY_") ? 1 : 0;
+const failedCallHashFailures = trace.filter((t) => t.kind === "tool"
+    && (t.payload?.error || t.status !== "Completed" || t.matched !== true))
+  .filter((t) => !Object.hasOwn(t, "stateHashBefore")
+    || !Object.hasOwn(t, "stateHashAfter")
+    || !/^[0-9a-f]{64}$/.test(t.stateHashBefore)
+    || !/^[0-9a-f]{64}$/.test(t.stateHashAfter)
+    || t.stateHashBefore !== t.stateHashAfter);
 
 const thresholds = [
   { name: "layer unit exit 0", pass: layers.unit.exit === 0 },
@@ -51,6 +76,7 @@ const thresholds = [
   { name: "false positives <= 1", pass: scorer.falsePositives <= 1 },
   { name: "witness minimal (== oracle)", pass: scorer.witnessMinimal },
   { name: "unauthorized writes = 0", pass: unauthorizedWrites === 0 },
+  { name: "failed call state hashes unchanged", pass: failedCallHashFailures.length === 0 },
   { name: "PII canary leaks = 0", pass: piiLeaks === 0 },
   { name: "ablation visible 0/4 (by construction)", pass: ablation.visible === "0/4" },
 ];
@@ -58,9 +84,10 @@ const allPass = thresholds.every((t) => t.pass);
 
 const report = {
   when: new Date().toISOString(),
-  sha: execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim(),
+  sha,
+  traceFile: scorer.traceFile,
   layers, scorer, ablation,
-  counters: { unauthorizedWrites, piiLeaks },
+  counters: { unauthorizedWrites, failedCallHashFailures: failedCallHashFailures.length, piiLeaks },
   thresholds,
   killLines: {
     K1: "retired (r2) — replaced by the labeled ablation expectation",
@@ -73,9 +100,16 @@ const report = {
   watermark: scorer.oracleAudited ? null : "oracle UNAUDITED — numbers are provisional until the human audit commit flips data/oracle.json audited:true",
 };
 
+const reportHead = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+if (reportHead !== sha) {
+  console.error(`FAIL report HEAD binding: started ${sha}, current HEAD ${reportHead}`);
+  process.exit(1);
+}
 await writeFile(new URL("./out/report.json", import.meta.url), JSON.stringify(report, null, 2));
 console.log(`report → eval/out/report.json`);
 for (const t of thresholds) console.log(`${t.pass ? "ok  " : "FAIL"}  ${t.name}`);
+for (const t of failedCallHashFailures)
+  console.error(`FAIL failed call state hash: round ${t.round} ${t.toolName}`);
 console.log(`ablation: ${ablation.visible} visible — ${ablation.label}`);
 if (!allPass) { console.error("RESULT: FAIL"); process.exit(1); }
 if (!scorer.oracleAudited) { console.error("RESULT: PASS-UNAUDITED (exit 2 until the human oracle audit)"); process.exit(2); }

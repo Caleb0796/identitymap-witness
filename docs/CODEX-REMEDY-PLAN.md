@@ -322,20 +322,20 @@ because pre-R7 successful stage legitimately changes authoritative state.
   and `payload?.violations?.length > 0` (R1 gives clean sweeps `violations: []`
   which must not match).
 - Relay's `call()` captures `stateHashBefore` and `stateHashAfter` per tool call
-  (JSON hash of `window.__imw.store.getState()` via `Runtime.evaluate`, captured
-  immediately around the invoke — human edits between rounds therefore cannot
-  pollute the comparison). `run.mjs` asserts: **every `ok:false` round has
+  (JSON hash of `window.__imw.store.snapshot()` — including the store-local id
+  allocator — via `Runtime.evaluate`, captured immediately around the invoke —
+  human edits between rounds therefore cannot pollute the comparison). `run.mjs` asserts: **every `ok:false` round has
   `stateHashBefore === stateHashAfter`** (R2's contract, enforced end-to-end in a
   real browser). Keep the existing revision-delta counter as-is until R7 replaces it.
 - Untrack regenerated artifacts: `git rm --cached eval/out/relay-*.json eval/out/report.json`,
   add both patterns to `.gitignore` (Push policy explains the final evidence-only
   freeze commit).
-- [ ] Step 1: failing scorer unit test `tests/scorer.test.mjs`: `score(path)` with a
+- [x] Step 1: failing scorer unit test `tests/scorer.test.mjs`: `score(path)` with a
       tmp trace whose `sha` mismatches HEAD → throws; malformed JSON → throws; a
       synthetic two-find trace (clean sweep first) → picks the counterexample find.
-- [ ] Step 2: implement; run `node eval/run.mjs` twice in a row and confirm
+- [x] Step 2: implement; run `node eval/run.mjs` twice in a row and confirm
       `report.json.traceFile` names the fresh sha both times.
-- [ ] Step 3: Commit `remedy: eval scores only the trace it just produced; per-call state capture (R6)`.
+- [x] Step 3: Commit `remedy: eval scores only the trace it just produced; per-call state capture (R6)`.
 
 **Phase 0 boundary:** run PUSH_GATE; all four commands exit 0 → `git push`.
 

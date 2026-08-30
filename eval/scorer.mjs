@@ -1,6 +1,7 @@
 // Machine-readable scorer — maps the four defect classes (frozen in
 // data/defects.md at T1) onto relay-trace observations and the oracle.
-import { readFile, readdir } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 
 // Transcribed from data/defects.md (frozen; the loop may not edit either copy).
 export const CLASS_MAP = {
@@ -10,19 +11,28 @@ export const CLASS_MAP = {
   DC4: { personaId: "P5", invariantId: "inv-sot", field: "department" },
 };
 
-export async function latestTrace() {
-  const dir = new URL("./out/", import.meta.url);
-  const files = (await readdir(dir)).filter((f) => f.startsWith("relay-") && f.endsWith(".json")).sort();
-  if (!files.length) throw new Error("no relay trace in eval/out — run harness/relay.mjs --e2e first");
-  const f = files.at(-1);
-  return { file: `eval/out/${f}`, trace: JSON.parse(await readFile(new URL(f, dir))) };
+export async function score(tracePath) {
+  if (typeof tracePath !== "string" || !tracePath)
+    throw new Error("score(tracePath) requires an explicit trace path");
+  const trace = JSON.parse(await readFile(tracePath, "utf8"));
+  return scoreTrace(trace, tracePath);
 }
 
-export async function score() {
-  const { file, trace } = await latestTrace();
+export async function scoreTrace(trace, tracePath,
+  head = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim()) {
+  if (trace.sha !== head)
+    throw new Error(`trace sha ${JSON.stringify(trace.sha)} does not match current HEAD ${head}`);
+  if (!Array.isArray(trace.trace)) throw new Error("trace.trace must be an array");
   const oracle = JSON.parse(await readFile(new URL("../data/oracle.json", import.meta.url)));
-  const find = trace.trace.find((t) => t.kind === "tool" && t.toolName === "find_mapping_counterexample" && t.payload?.violations);
-  if (!find) throw new Error("trace has no successful find_mapping_counterexample");
+  const find = trace.trace.find((t) => t.kind === "tool"
+    && t.toolName === "find_mapping_counterexample"
+    && t.status === "Completed"
+    && t.matched === true
+    && typeof t.invocationId === "string"
+    && t.invocationId.trim().length > 0
+    && Array.isArray(t.payload?.violations)
+    && t.payload.violations.length > 0);
+  if (!find) throw new Error("trace has no qualifying find_mapping_counterexample");
   const seen = find.payload.violations;
   const classes = {};
   for (const [dc, m] of Object.entries(CLASS_MAP)) {
@@ -34,7 +44,7 @@ export async function score() {
   const witnessMinimal = witness.length === oracle.minimalWitness.size
     && oracle.minimalWitness.sets.some((s) => JSON.stringify(s) === JSON.stringify(witness));
   return {
-    traceFile: file,
+    traceFile: tracePath,
     classes,
     recall: `${Object.values(classes).filter(Boolean).length}/4`,
     falsePositives,

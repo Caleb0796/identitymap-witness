@@ -100,12 +100,21 @@ async function smokeSession(round, baseUrl) {
 async function e2e(baseUrl) {
   const s = await bootSession(baseUrl);
   const trace = [];
+  const stateHash = () => s.evalJs(`crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(window.__imw.store.snapshot())),
+  ).then((bytes) => [...new Uint8Array(bytes)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join(""))`, { awaitPromise: true });
   const call = async (round, toolName, input) => {
+    const stateHashBefore = await stateHash();
     const t0 = Date.now();
     const r = await invokeTool(s.cdp, s.sessionId, s.frameId, toolName, input);
+    const stateHashAfter = await stateHash();
     const text = textOf(r.output);
     trace.push({ round, kind: "tool", toolName, input, invocationId: r.invocationId,
-      status: r.status, matched: r.matched, ms: Date.now() - t0, payload: text ? JSON.parse(text) : null });
+      status: r.status, matched: r.matched, stateHashBefore, stateHashAfter,
+      ms: Date.now() - t0, payload: text ? JSON.parse(text) : null });
     if (text?.includes("CANARY_")) throw new Error(`round ${round}: canary leak`);
     return { r, p: text ? JSON.parse(text) : null };
   };

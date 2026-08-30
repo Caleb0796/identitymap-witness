@@ -1,5 +1,7 @@
 node_modules/
 eval/out/tmp-*
+eval/out/relay-*.json
+eval/out/report.json
 .claude/.ralph-loop.local.md
 chrome-profile-*/
 .DS_Store
