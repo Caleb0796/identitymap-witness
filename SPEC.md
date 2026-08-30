@@ -6,7 +6,8 @@ Deadline: **Devpost 2026-09-03 13:00 PT**. r2 incorporates the 2026-08-29
 gpt-5.6-sol adversarial review (`reviews/codex-sol-2026-08-29.md`): direction cut,
 defective-by-design golden draft, full tool schemas, fingerprint invalidation,
 honest eval relabeling. r4 changelog — R1: clean sweeps are successful results,
-with explicit checked scope and full-sweep-gated global all-clear UI.
+with explicit checked scope and full-sweep-gated global all-clear UI; R2: every
+failed tool result restores byte-identical store state, including its id allocator.
 
 ## 1. One line
 
@@ -199,6 +200,10 @@ tool exists.
 - Mutating actions — `EDIT_EXPRESSION{field, expr}`, `SET_PRIORITY{priority}`,
   `PIN_INVARIANTS{invariants}` (full replace), `UNPIN{id}` — bump `revision` by 1.
   `recordEvidence`/`recordPacket` do NOT bump (derived data).
+- Tool calls are failure-atomic: `runTool` snapshots the state and store-local id
+  allocator on entry. Every final `ok:false` restores that snapshot by rebinding
+  the state, so `revision`, `pins`, `evidence`, `packets`, and the next allocated
+  evidence or packet id are exactly as they were before the call.
 - Evidence fingerprint (recorded at creation):
   `{fields: [every field evaluated], invariants: [every pin checked], personas: [every persona evaluated]}`
   — for `find_…` that is ALL fields × named pins × all personas; for `preview_…`

@@ -1,11 +1,10 @@
 // Session store — SPEC.md r2 §8. Mutations bump revision and stale-mark evidence
 // by recorded fingerprint; derived records (evidence, packets) never bump.
 
-let nextId = 0;
-const uid = (p) => `${p}-${++nextId}`;
-
 export function createStore(initial) {
-  const state = structuredClone(initial);
+  let state = structuredClone(initial);
+  let nextId = 0;
+  const uid = (p) => `${p}-${++nextId}`;
   state.pins = state.pins ?? [];
   state.evidence = {};
   state.packets = {};
@@ -16,6 +15,13 @@ export function createStore(initial) {
 
   return {
     getState: () => state,
+
+    snapshot: () => ({ state: structuredClone(state), nextId }),
+
+    restore(snap) {
+      state = structuredClone(snap.state);
+      nextId = snap.nextId;
+    },
 
     dispatch(action) {
       switch (action.type) {

@@ -178,15 +178,15 @@ module-global `nextId` would let a rolled-back failure consume `E-1`). `runTool`
 takes a snapshot on entry; every `ok:false` return path restores it. With R1 done
 there are no evidence-recording errors left, so no exemptions.
 
-- [ ] Step 1: failing unit test `tests/atomicity.test.mjs`: for EVERY tool, drive at
+- [x] Step 1: failing unit test `tests/atomicity.test.mjs`: for EVERY tool, drive at
       least one failure per reachable error code (REVISION_MISMATCH, BAD_RULE,
       STALE_EVIDENCE, INVALID_AST, UNKNOWN_PERSONA, PII_GUARD, budget-exceeded via a
       2,000-char pin id) and assert `JSON.stringify(store.getState())` identical
       before and after — including `evidence`, `packets`, `revision`, `pins`.
       Plus: after a rolled-back failure, the NEXT successful evidence id is the same
       id it would have been without the failure (allocator restored).
-- [ ] Step 2: implement; `npm test` green.
-- [ ] Step 3: SPEC §8 gains the atomicity clause. Commit `remedy: failed calls roll back all state incl. id allocator (R2)`.
+- [x] Step 2: implement; `npm test` green.
+- [x] Step 3: SPEC §8 gains the atomicity clause. Commit `remedy: failed calls roll back all state incl. id allocator (R2)`.
 
 ### R3 — one finalizer for success AND error envelopes, total-size fallback
 

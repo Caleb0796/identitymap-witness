@@ -216,18 +216,24 @@ function shrink(payload) {
 }
 
 export function runTool(store, personas, name, args) {
+  const snap = store.snapshot();
+  const rollback = (result) => {
+    store.restore(snap);
+    return result;
+  };
   const h = HANDLERS[name];
-  if (!h) return { ok: false, error: { code: "UNKNOWN_TOOL", name } };
+  if (!h) return rollback({ ok: false, error: { code: "UNKNOWN_TOOL", name } });
   let r;
   try { r = h(store, personas, args ?? {}); }
   catch (e) { r = { ok: false, error: { code: e.code ?? "EVALUATOR_FAILED", reason: String(e.message ?? e) } }; }
-  if (!r.ok) return r;
+  if (!r.ok) return rollback(r);
   let payload = redactPayload(r.payload);
-  try { assertNoCanary(payload); } catch (e) { return failure("PII_GUARD", { reason: e.message }); }
+  try { assertNoCanary(payload); }
+  catch (e) { return rollback(failure("PII_GUARD", { reason: e.message })); }
   if (JSON.stringify(payload).length > 1500) {
     const small = shrink(payload);
     if (!small || JSON.stringify(small).length > 1500)
-      return failure("EVALUATOR_FAILED", { reason: "payload budget exceeded" });
+      return rollback(failure("EVALUATOR_FAILED", { reason: "payload budget exceeded" }));
     payload = small;
   }
   return { ok: true, payload };
