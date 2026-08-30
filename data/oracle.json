@@ -1,72 +1,227 @@
 {
-  "audited": false,
+  "audited": true,
   "minimalWitness": {
-    "invariants": ["inv-forbid", "inv-null", "inv-sot"],
+    "invariants": [
+      "inv-forbid",
+      "inv-null",
+      "inv-sot"
+    ],
     "size": 3,
-    "sets": [["P2", "P3", "P4"], ["P2", "P3", "P5"]]
+    "sets": [
+      [
+        "P2",
+        "P3",
+        "P4"
+      ],
+      [
+        "P2",
+        "P3",
+        "P5"
+      ]
+    ]
   },
   "expectedViolations": [
-    { "invariantId": "inv-forbid", "personaId": "P2", "field": "group", "defectClass": "DC1" },
-    { "invariantId": "inv-null", "personaId": "P3", "field": "managerId", "defectClass": "DC2" },
-    { "invariantId": "inv-sot", "personaId": "P4", "field": "department", "defectClass": "DC3" },
-    { "invariantId": "inv-sot", "personaId": "P5", "field": "department", "defectClass": "DC4" }
+    {
+      "invariantId": "inv-forbid",
+      "personaId": "P2",
+      "field": "group",
+      "defectClass": "DC1"
+    },
+    {
+      "invariantId": "inv-null",
+      "personaId": "P3",
+      "field": "managerId",
+      "defectClass": "DC2"
+    },
+    {
+      "invariantId": "inv-sot",
+      "personaId": "P4",
+      "field": "department",
+      "defectClass": "DC3"
+    },
+    {
+      "invariantId": "inv-sot",
+      "personaId": "P5",
+      "field": "department",
+      "defectClass": "DC4"
+    }
   ],
   "expectedValues": {
     "P1": {
-      "displayName": { "value": "CANARY_FN_P1 CANARY_LN_P1", "provSource": "expr" },
-      "group": { "value": "employees", "provSource": "literal" },
-      "managerId": { "value": "M100", "provSource": "hris" },
-      "department": { "value": "Engineering", "provSource": "hris" },
-      "email": { "value": "CANARY_EM_P1@example.invalid", "provSource": "okta" }
+      "displayName": {
+        "value": "CANARY_FN_P1 CANARY_LN_P1",
+        "provSource": "expr"
+      },
+      "group": {
+        "value": "employees",
+        "provSource": "literal"
+      },
+      "managerId": {
+        "value": "M100",
+        "provSource": "hris"
+      },
+      "department": {
+        "value": "Engineering",
+        "provSource": "hris"
+      },
+      "email": {
+        "value": "CANARY_EM_P1@example.invalid",
+        "provSource": "okta"
+      }
     },
     "P2": {
-      "displayName": { "value": "CANARY_FN_P2 CANARY_LN_P2", "provSource": "expr" },
-      "group": { "value": "employees", "provSource": "literal" },
-      "managerId": { "value": "M200", "provSource": "hris" },
-      "department": { "value": "Marketing", "provSource": "hris" },
-      "email": { "value": "CANARY_EM_P2@example.invalid", "provSource": "okta" }
+      "displayName": {
+        "value": "CANARY_FN_P2 CANARY_LN_P2",
+        "provSource": "expr"
+      },
+      "group": {
+        "value": "employees",
+        "provSource": "literal"
+      },
+      "managerId": {
+        "value": "M200",
+        "provSource": "hris"
+      },
+      "department": {
+        "value": "Marketing",
+        "provSource": "hris"
+      },
+      "email": {
+        "value": "CANARY_EM_P2@example.invalid",
+        "provSource": "okta"
+      }
     },
     "P3": {
-      "displayName": { "value": "CANARY_FN_P3 CANARY_LN_P3", "provSource": "expr" },
-      "group": { "value": "employees", "provSource": "literal" },
-      "managerId": { "value": "", "provSource": "literal" },
-      "department": { "value": "Support", "provSource": "hris" },
-      "email": { "value": "CANARY_EM_P3@example.invalid", "provSource": "okta" }
+      "displayName": {
+        "value": "CANARY_FN_P3 CANARY_LN_P3",
+        "provSource": "expr"
+      },
+      "group": {
+        "value": "employees",
+        "provSource": "literal"
+      },
+      "managerId": {
+        "value": "",
+        "provSource": "literal"
+      },
+      "department": {
+        "value": "Support",
+        "provSource": "hris"
+      },
+      "email": {
+        "value": "CANARY_EM_P3@example.invalid",
+        "provSource": "okta"
+      }
     },
     "P4": {
-      "displayName": { "value": "CANARY_FN_P4H CANARY_LN_P4", "provSource": "expr" },
-      "group": { "value": "employees", "provSource": "literal" },
-      "managerId": { "value": "M400", "provSource": "hris" },
-      "department": { "value": "Sales", "provSource": "ad" },
-      "email": { "value": "CANARY_EM_P4@example.invalid", "provSource": "okta" }
+      "displayName": {
+        "value": "CANARY_FN_P4H CANARY_LN_P4",
+        "provSource": "expr"
+      },
+      "group": {
+        "value": "employees",
+        "provSource": "literal"
+      },
+      "managerId": {
+        "value": "M400",
+        "provSource": "hris"
+      },
+      "department": {
+        "value": "Sales",
+        "provSource": "ad"
+      },
+      "email": {
+        "value": "CANARY_EM_P4@example.invalid",
+        "provSource": "okta"
+      }
     },
     "P5": {
-      "displayName": { "value": "CANARY_FN_P5 CANARY_LN_P5", "provSource": "expr" },
-      "group": { "value": "employees", "provSource": "literal" },
-      "managerId": { "value": "M500", "provSource": "hris" },
-      "department": { "value": "", "provSource": "ad" },
-      "email": { "value": "CANARY_EM_P5@example.invalid", "provSource": "okta" }
+      "displayName": {
+        "value": "CANARY_FN_P5 CANARY_LN_P5",
+        "provSource": "expr"
+      },
+      "group": {
+        "value": "employees",
+        "provSource": "literal"
+      },
+      "managerId": {
+        "value": "M500",
+        "provSource": "hris"
+      },
+      "department": {
+        "value": "",
+        "provSource": "ad"
+      },
+      "email": {
+        "value": "CANARY_EM_P5@example.invalid",
+        "provSource": "okta"
+      }
     },
     "P6": {
-      "displayName": { "value": "CANARY_FN_P6 CANARY_LN_P6", "provSource": "expr" },
-      "group": { "value": "employees", "provSource": "literal" },
-      "managerId": { "value": "M600", "provSource": "hris" },
-      "department": { "value": "Ops", "provSource": "hris" },
-      "email": { "value": "CANARY_EM_P6@example.invalid", "provSource": "okta" }
+      "displayName": {
+        "value": "CANARY_FN_P6 CANARY_LN_P6",
+        "provSource": "expr"
+      },
+      "group": {
+        "value": "employees",
+        "provSource": "literal"
+      },
+      "managerId": {
+        "value": "M600",
+        "provSource": "hris"
+      },
+      "department": {
+        "value": "Ops",
+        "provSource": "hris"
+      },
+      "email": {
+        "value": "CANARY_EM_P6@example.invalid",
+        "provSource": "okta"
+      }
     },
     "P7": {
-      "displayName": { "value": "CANARY_FN_P7 CANARY_LN_P7", "provSource": "expr" },
-      "group": { "value": "contractors", "provSource": "literal" },
-      "managerId": { "value": "M700", "provSource": "hris" },
-      "department": { "value": "Legal", "provSource": "hris" },
-      "email": { "value": "CANARY_EM_P7@example.invalid", "provSource": "okta" }
+      "displayName": {
+        "value": "CANARY_FN_P7 CANARY_LN_P7",
+        "provSource": "expr"
+      },
+      "group": {
+        "value": "contractors",
+        "provSource": "literal"
+      },
+      "managerId": {
+        "value": "M700",
+        "provSource": "hris"
+      },
+      "department": {
+        "value": "Legal",
+        "provSource": "hris"
+      },
+      "email": {
+        "value": "CANARY_EM_P7@example.invalid",
+        "provSource": "okta"
+      }
     },
     "P8": {
-      "displayName": { "value": "CANARY_FN_P8 CANARY_LN_P8", "provSource": "expr" },
-      "group": { "value": "employees", "provSource": "literal" },
-      "managerId": { "value": "M800", "provSource": "hris" },
-      "department": { "value": "Design", "provSource": "hris" },
-      "email": { "value": "CANARY_EM_P8@example.invalid", "provSource": "okta" }
+      "displayName": {
+        "value": "CANARY_FN_P8 CANARY_LN_P8",
+        "provSource": "expr"
+      },
+      "group": {
+        "value": "employees",
+        "provSource": "literal"
+      },
+      "managerId": {
+        "value": "M800",
+        "provSource": "hris"
+      },
+      "department": {
+        "value": "Design",
+        "provSource": "hris"
+      },
+      "email": {
+        "value": "CANARY_EM_P8@example.invalid",
+        "provSource": "okta"
+      }
     }
   }
 }
