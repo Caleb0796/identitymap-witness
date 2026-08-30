@@ -1,6 +1,6 @@
 {
-  "when": "2026-08-29T23:55:33.166Z",
-  "sha": "a559c6f",
+  "when": "2026-08-30T01:29:41.361Z",
+  "sha": "2e4a559",
   "layers": {
     "unit": {
       "exit": 0
@@ -28,7 +28,7 @@
       "P4"
     ],
     "witnessMinimal": true,
-    "oracleAudited": false
+    "oracleAudited": true
   },
   "ablation": {
     "label": "persisted-state ablation: defects are session-introduced BY CONSTRUCTION; 0/4 visible pre-save is the expected workflow property, not a benchmark win",
@@ -85,6 +85,6 @@
     "K4": "clock gate — enforced by tools/verify.mjs",
     "K5": "human-evidence gate — enforced by tools/verify.mjs"
   },
-  "oracleAudited": false,
-  "watermark": "oracle UNAUDITED — numbers are provisional until the human audit commit flips data/oracle.json audited:true"
+  "oracleAudited": true,
+  "watermark": null
 }
