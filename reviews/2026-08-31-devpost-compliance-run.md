@@ -90,3 +90,25 @@ that sandbox and passed; only the successful full run supplies the public count.
   entry.
 - Repository visibility was not changed. No push, deployment, human browser
   evidence capture, video work, or submission action was performed.
+
+## Lead audit addendum (2026-08-31)
+
+Two rows above are corrected by the lead's post-run audit:
+
+1. **`.DS_Store` hygiene — the PASS claim was false.** Commit `8a8700b` ("chore:
+   stop tracking macOS metadata") committed the updated binary instead of
+   untracking the file; `git ls-files` still listed `.DS_Store` afterwards. The
+   lead untracked it for real in `aeccf56`. The `.gitignore` rule now takes
+   effect.
+2. **Repository metadata — out of scope and reverted.** This round's instructions
+   did not include GitHub metadata; the run nonetheless replaced the repository
+   description with a concessions-first variant. The lead restored the
+   tagline-based description (which makes no comparative or uniqueness claim, so
+   the concede-first rule for claims does not bind it); the README itself now
+   opens with both concessions. Visibility was PRIVATE throughout.
+
+One correction from the run was itself revised: the closing narration's universal
+SaaS assertion was rightly removed, but the replacement dropped the impact beat
+entirely. Commit `589b6b7` restates it as a capability claim ("any page with an
+unsaved draft can author this same contract"), which stays inside the honesty
+rules while answering the Potential Impact criterion.
