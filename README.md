@@ -23,6 +23,11 @@ or apply changes.
   reports 4/4 seeded defect classes, the audited size-3 oracle witness, zero
   write-oracle/hash/PII failures, `oracleAudited: true`, and no watermark. Generated
   eval output is intentionally git-ignored; reproduce it with `node eval/run.mjs`.
+  Before submission, the final report and HEAD-bound relay trace are committed
+  once, in an evidence-only commit from the final code state (see
+  [`docs/EVIDENCE-CHECKLIST.md`](docs/EVIDENCE-CHECKLIST.md)), so these links
+  resolve for judges; committing them earlier would bind them to a superseded
+  commit.
 - Final `npm test` count: **281 tests, 281 passed, 0 failed, 0 skipped**. No
   coverage percentage is claimed.
 - The remaining entry work is human-run model evaluation, final video capture,
