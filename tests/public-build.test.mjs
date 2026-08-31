@@ -24,10 +24,12 @@ test("curated Render build contains the complete page graph and no repository in
   assert.deepEqual(actual, [
     "app.js",
     "data/personas.json",
+    "favicon.svg",
     "index.html",
     "src/engine/eval.mjs",
     "src/engine/invariants.mjs",
     "src/engine/parser.mjs",
+    "src/engine/personas.mjs",
     "src/engine/witness.mjs",
     "src/store/reducer.mjs",
     "src/tools/defs.mjs",
@@ -36,9 +38,12 @@ test("curated Render build contains the complete page graph and no repository in
     "style.css",
   ]);
   const app = await readFile(join(output, "app.js"), "utf8");
+  const favicon = await readFile(join(output, "favicon.svg"), "utf8");
   const index = await readFile(join(output, "index.html"), "utf8");
   assert.match(app, /fetch\("\.\/data\/personas\.json"\)/);
+  assert.match(index, /rel="icon" type="image\/svg\+xml" href="\.\/favicon\.svg"/);
   assert.match(index, /src="\.\/app\.js"/);
+  assert.doesNotMatch(favicon, /<(?:script|image|use)\b|href\s*=/i);
   assert.ok(!actual.some((path) => path.startsWith("tests/") || path.startsWith(".git/")));
   assert.ok(!actual.includes("package.json"));
 });

@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IdentityMap Witness</title>
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -26,6 +27,7 @@
     </div>
   </header>
   <main>
+    <div id="initialization-error" class="stale-banner" role="alert" aria-atomic="true" hidden></div>
     <section id="mapping" class="card">
       <h2>Unsaved mapping draft</h2>
       <div class="hint">
@@ -37,7 +39,9 @@
         · session-only until a human saves · synthetic personas, canary identities
       </div>
       <div id="evaluation-error" class="stale-banner" aria-live="polite" hidden></div>
-      <table id="grid"><thead><tr><th>target field</th><th>expression (draft)</th><th>prov</th></tr></thead><tbody></tbody></table>
+      <div class="table-scroll" data-scroll-label="Mapping table">
+        <table id="grid"><thead><tr><th>target field</th><th>expression (draft)</th><th>prov</th></tr></thead><tbody></tbody></table>
+      </div>
     </section>
     <section id="invariants" class="card">
       <h2>Pinned invariants</h2>
@@ -53,8 +57,10 @@
     <section id="witness" class="card">
       <h2>Counterexample matrix</h2>
       <div id="stale-banner" class="stale-banner" aria-live="polite" hidden>STALE — the draft changed after this evidence was computed; the packet below will refuse it</div>
-      <table id="matrix"><thead><tr><th>persona</th><th>invariant</th><th>field</th><th>detail</th></tr></thead><tbody></tbody></table>
-      <div class="hint" id="matrix-hint" hidden>click a row for provenance</div>
+      <div class="table-scroll" data-scroll-label="Counterexample matrix table">
+        <table id="matrix"><thead><tr><th>persona</th><th>invariant</th><th>field</th><th>detail</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="hint" id="matrix-hint" hidden>Select a persona to view provenance</div>
     </section>
     <section id="provenance" class="card" hidden>
       <h2>Provenance rail</h2>

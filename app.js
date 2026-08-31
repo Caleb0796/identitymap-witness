@@ -6,22 +6,53 @@ import {
   registerToolDefinitions,
 } from "./src/tools/defs.mjs";
 import { createStore, packetFresh } from "./src/store/reducer.mjs";
+import { validatePersonasFixture } from "./src/engine/personas.mjs";
 import { evaluateAll } from "./src/engine/witness.mjs";
 import { parse } from "./src/engine/parser.mjs";
 
-const personas = await fetch("./data/personas.json").then((r) => r.json());
+const $ = (sel) => document.querySelector(sel);
+const present = typeof document.modelContext?.registerTool === "function";
+$("#origin-badge").textContent = `origin: ${location.host}`;
+$("#mc-badge").textContent = `modelContext: ${present ? "present" : "absent"}`;
+$("#mc-badge").classList.add(present ? "on" : "off");
+$("#tools-badge").textContent = "tools: loading";
+$("#tools-badge").classList.remove("on", "off");
+$("#reset-demo").addEventListener("click", () => location.reload());
+
+let personas = null;
+let dataError = null;
+try {
+  const response = await fetch("./data/personas.json");
+  if (!response.ok) throw new Error(`personas request failed with HTTP ${response.status}`);
+  personas = validatePersonasFixture(await response.json());
+} catch (caught) {
+  dataError = caught;
+}
+
+if (dataError) {
+  const error = $("#initialization-error");
+  error.textContent = "Demo data could not be loaded. Reload the page to retry.";
+  error.hidden = false;
+  $("#tools-badge").textContent = "tools: unavailable";
+  $("#tools-badge").classList.add("off");
+  $("#rev-badge").textContent = "r—";
+  for (const selector of ["#copy-prompt-1", "#copy-prompt-2", "#priority-select", "#apply"])
+    $(selector).disabled = true;
+  console.error("IdentityMap Witness demo data failed validation", dataError);
+}
+
+if (personas) {
 const store = createStore(GOLDEN_STATE);
 const ui = { lastFind: null, lastSweep: null, lastPacket: null, selected: null, pendingError: null };
 const COPY_PROMPT_1 = "Read the mapping session on this page. Stage exactly these three invariants and then stop and tell me to confirm them on the page: (1) contractors must never map into the employees group; (2) if no source supplies managerId the target must stay null; (3) hris is the source of truth for department. Do not call any other tool until I tell you I confirmed.";
 const COPY_PROMPT_2 = "I confirmed the rules. Re-read the session, then find the minimal counterexample set. Walk me through fixing every violation: tell me exactly which expression or the priority order to change in the page UI. After each of my edits, re-find at the current revision. When violations reach zero, prepare the review packet from the fresh evidence ids.";
 
-const $ = (sel) => document.querySelector(sel);
 const show = (v) => v === null ? "∅ null" : v === "" ? '"" empty' : String(v);
 const allClear = document.createElement("div");
 allClear.id = "all-clear";
 allClear.className = "hint";
 allClear.hidden = true;
-$("#matrix").before(allClear);
+$("#matrix").closest(".table-scroll").before(allClear);
 
 async function copyText(text) {
   if (navigator.clipboard?.writeText) {
@@ -106,6 +137,23 @@ function renderPending(s) {
   }
 }
 
+function syncScrollRegions() {
+  for (const container of document.querySelectorAll(".table-scroll")) {
+    const overflows = container.scrollWidth > container.clientWidth + 1;
+    if (overflows) {
+      container.tabIndex = 0;
+      container.setAttribute("role", "region");
+      container.setAttribute("aria-label", container.dataset.scrollLabel);
+    } else {
+      container.removeAttribute("tabindex");
+      container.removeAttribute("role");
+      container.removeAttribute("aria-label");
+    }
+  }
+}
+
+window.addEventListener("resize", syncScrollRegions);
+
 function renderRail(outs) {
   const sel = ui.selected;
   const section = $("#provenance");
@@ -153,7 +201,11 @@ function renderRail(outs) {
       body.append(row);
     }
     table.append(header, body);
-    rail.append(table);
+    const scroll = document.createElement("div");
+    scroll.className = "table-scroll";
+    scroll.dataset.scrollLabel = "Provenance candidates table";
+    scroll.append(table);
+    rail.append(scroll);
   } else if (p.inputs.length) {
     const inputs = document.createElement("div");
     inputs.className = "hint";
@@ -168,6 +220,10 @@ function renderRail(outs) {
 }
 
 function render() {
+  const active = document.activeElement;
+  const matrixFocus = active?.classList.contains("matrix-select")
+    ? { personaId: active.dataset.personaId, field: active.dataset.field }
+    : null;
   const s = store.getState();
   $("#rev-badge").textContent = `r${s.revision}`;
   $("#priority-select").value = s.priority.join(",");
@@ -293,10 +349,23 @@ function render() {
     const row = document.createElement("tr");
     row.dataset.row = String(index);
     if (findStale) row.classList.add("stale");
-    if (ui.selected && ui.selected.personaId === violation.personaId && ui.selected.field === violation.field)
-      row.classList.add("selected");
+    const selected = ui.selected
+      && ui.selected.personaId === violation.personaId
+      && ui.selected.field === violation.field;
+    if (selected) row.classList.add("selected");
+    const personaCell = document.createElement("td");
+    const select = document.createElement("button");
+    select.type = "button";
+    select.className = "matrix-select";
+    select.dataset.personaId = violation.personaId;
+    select.dataset.field = violation.field;
+    select.textContent = violation.personaId;
+    select.setAttribute("aria-label", `Show provenance for persona ${violation.personaId}, field ${violation.field}, invariant ${violation.invariantId}`);
+    select.setAttribute("aria-controls", "provenance");
+    select.setAttribute("aria-expanded", String(Boolean(selected)));
+    personaCell.append(select);
+    row.append(personaCell);
     for (const [value, className] of [
-      [violation.personaId, ""],
       [violation.invariantId, "viol"],
       [violation.field, ""],
       [violation.detail ?? "", ""],
@@ -336,12 +405,14 @@ function render() {
     ps.textContent = "no packet";
   }
   $("#apply").disabled = !(fresh && pkt.blockers.length === 0);
+  syncScrollRegions();
+  if (matrixFocus) {
+    const replacement = [...document.querySelectorAll(".matrix-select")].find((button) =>
+      button.dataset.personaId === matrixFocus.personaId && button.dataset.field === matrixFocus.field);
+    replacement?.focus({ preventScroll: true });
+  }
 }
 
-const present = typeof document.modelContext?.registerTool === "function";
-$("#origin-badge").textContent = `origin: ${location.host}`;
-$("#mc-badge").textContent = `modelContext: ${present ? "present" : "absent"}`;
-$("#mc-badge").classList.add(present ? "on" : "off");
 $("#priority-select").addEventListener("change", (event) => {
   store.dispatch({ type: "SET_PRIORITY", priority: event.target.value.split(",") });
   render();
@@ -359,7 +430,6 @@ for (const [selector, prompt, label] of [
     }
   });
 }
-$("#reset-demo").addEventListener("click", () => location.reload());
 $("#apply").addEventListener("click", () => alert("Apply is a manual page control, is not exposed as a WebMCP tool, and this demo never exercises it."));
 
 const lifecycle = new AbortController();
@@ -423,3 +493,4 @@ Object.defineProperty(window, "__imw", {
   writable: false,
   configurable: false,
 });
+}

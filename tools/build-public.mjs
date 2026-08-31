@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const STATIC_FILES = ["index.html", "style.css", "data/personas.json"];
+const STATIC_FILES = ["favicon.svg", "index.html", "style.css", "data/personas.json"];
 const IMPORT_PATTERN = /\b(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/g;
 
 function insideRoot(path) {

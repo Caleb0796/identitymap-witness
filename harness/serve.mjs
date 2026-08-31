@@ -7,15 +7,18 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const MIME = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript",
   ".css": "text/css", ".json": "application/json", ".png": "image/png",
+  ".svg": "image/svg+xml",
 };
 const PUBLIC_FILES = new Set([
   "index.html",
   "app.js",
+  "favicon.svg",
   "style.css",
   "data/personas.json",
   `src${sep}engine${sep}eval.mjs`,
   `src${sep}engine${sep}invariants.mjs`,
   `src${sep}engine${sep}parser.mjs`,
+  `src${sep}engine${sep}personas.mjs`,
   `src${sep}engine${sep}witness.mjs`,
   `src${sep}store${sep}reducer.mjs`,
   `src${sep}tools${sep}defs.mjs`,

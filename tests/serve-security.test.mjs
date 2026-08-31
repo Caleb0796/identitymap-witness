@@ -8,7 +8,11 @@ function get(port, path) {
     const req = request({ host: "127.0.0.1", port, path }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
-      res.on("end", () => resolve({ status: res.statusCode, body: Buffer.concat(chunks) }));
+      res.on("end", () => resolve({
+        status: res.statusCode,
+        headers: res.headers,
+        body: Buffer.concat(chunks),
+      }));
     });
     req.on("error", reject);
     req.end();
@@ -22,9 +26,11 @@ test("local server exposes only the public application asset graph", async (t) =
   for (const path of [
     "/",
     "/app.js",
+    "/favicon.svg",
     "/style.css",
     "/src/tools/defs.mjs",
     "/src/engine/eval.mjs",
+    "/src/engine/personas.mjs",
     "/data/personas.json",
   ]) {
     await t.test(`allows ${path}`, async () => {
@@ -34,10 +40,15 @@ test("local server exposes only the public application asset graph", async (t) =
     });
   }
 
+  const favicon = await get(port, "/favicon.svg");
+  assert.equal(favicon.status, 200);
+  assert.equal(favicon.headers["content-type"], "image/svg+xml");
+
   for (const path of [
     "/.git/HEAD",
     "/.DS_Store",
     "/package.json",
+    "/favicon.ico",
     "/tests/validate.test.mjs",
     "/src/not-in-the-page-graph.mjs",
     "/%00",

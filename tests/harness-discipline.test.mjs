@@ -26,3 +26,30 @@ test("scripted human actions mutate the page only through DOM events", () => {
     /selector: "#confirm-pending",\s*detached: true, renderedVersion: 1/,
     "the detached stale-confirm click must remain represented in the human-dom trace");
 });
+
+test("matrix keyboard coverage uses trusted CDP keys rather than DOM click", () => {
+  const start = source.indexOf("const firstMatrixButton");
+  const end = source.indexOf("const E1", start);
+  const keyboardCoverage = source.slice(start, end);
+  assert.ok(start >= 0 && end > start, "matrix keyboard coverage block must exist");
+  assert.match(keyboardCoverage, /pressKey\(s, "Enter", "Enter", 13\)/);
+  assert.match(keyboardCoverage, /pressKey\(s, " ", "Space", 32\)/);
+  assert.doesNotMatch(keyboardCoverage, /\.click\s*\(/,
+    "matrix Enter/Space assertions must not be replaced with DOM click");
+});
+
+test("failure coverage installs request interception before navigation", () => {
+  const start = source.indexOf("async function initializationFailureSession");
+  const end = source.indexOf("async function initializationFailureCoverage", start);
+  const failureCoverage = source.slice(start, end);
+  const fetchEnable = failureCoverage.indexOf('cdp.send("Fetch.enable"');
+  const navigate = failureCoverage.indexOf('cdp.send("Page.navigate"');
+  assert.match(failureCoverage, /launchChrome\(\{ cdpPort, url: "about:blank" \}\)/);
+  assert.ok(fetchEnable >= 0 && navigate >= 0 && fetchEnable < navigate,
+    "Fetch interception must be active before navigation");
+});
+
+test("E2E traces never overwrite prior evidence", () => {
+  assert.match(source, /IMW_E2E_TRACE_PATH must be absolute/);
+  assert.match(source, /\{ flag: "wx" \}/);
+});

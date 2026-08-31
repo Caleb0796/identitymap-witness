@@ -3,7 +3,7 @@
 // completed round trip (WebMCP.enable returns OK even with no page API — measured;
 // recorded, never asserted). By-name calls go over the CDP WebMCP domain.
 import { execSync } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { startServer } from "./serve.mjs";
 import { launchChrome } from "./chrome.mjs";
 import { connect, invokeTool, textOf } from "./cdp.mjs";
@@ -72,6 +72,72 @@ async function bootSession(baseUrl) {
   return { chrome, cdp, sessionId, frameId: frameTree.frame.id, evalJs, cdpDomainEnabled };
 }
 
+async function pressKey(s, key, code, virtualKeyCode) {
+  const text = code === "Enter" ? "\r" : key.length === 1 ? key : "";
+  const params = { key, code, windowsVirtualKeyCode: virtualKeyCode };
+  await s.cdp.send("Input.dispatchKeyEvent", {
+    type: text ? "keyDown" : "rawKeyDown",
+    text,
+    unmodifiedText: text,
+    ...params,
+  }, s.sessionId);
+  await s.cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...params }, s.sessionId);
+}
+
+async function viewportState(s, width) {
+  await s.cdp.send("Emulation.setDeviceMetricsOverride", {
+    width,
+    height: 568,
+    deviceScaleFactor: 1,
+    mobile: false,
+  }, s.sessionId);
+  await s.evalJs("new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))", {
+    awaitPromise: true,
+  });
+  return s.evalJs(`({
+    innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    bodyWidth: document.body.scrollWidth,
+    regions: [...document.querySelectorAll(".table-scroll")].map((container) => ({
+      table: container.querySelector("table")?.id
+        || (container.closest("#provenance") ? "provenance" : "unknown"),
+      clientWidth: container.clientWidth,
+      scrollWidth: container.scrollWidth,
+      tabindex: container.getAttribute("tabindex"),
+      role: container.getAttribute("role"),
+      label: container.getAttribute("aria-label"),
+      expectedLabel: container.dataset.scrollLabel,
+    })),
+  })`);
+}
+
+async function assertResponsiveState(s, phase, requiredAt320) {
+  for (const width of [320, 390, 1024, 1440]) {
+    const state = await viewportState(s, width);
+    if (state.documentWidth > state.innerWidth || state.bodyWidth > state.innerWidth)
+      throw new Error(`${phase} ${width}px: page overflow ${JSON.stringify(state)}`);
+    for (const region of state.regions) {
+      const overflows = region.scrollWidth > region.clientWidth + 1;
+      if (overflows) {
+        assertEq(region.tabindex, "0", `${phase} ${width}px ${region.table} tabindex`);
+        assertEq(region.role, "region", `${phase} ${width}px ${region.table} role`);
+        assertEq(region.label, region.expectedLabel, `${phase} ${width}px ${region.table} label`);
+      } else {
+        assertEq(region.tabindex, null, `${phase} ${width}px ${region.table} no tabindex`);
+        assertEq(region.role, null, `${phase} ${width}px ${region.table} no role`);
+        assertEq(region.label, null, `${phase} ${width}px ${region.table} no aria-label`);
+      }
+    }
+    if (width === 320) {
+      for (const table of requiredAt320) {
+        const region = state.regions.find((candidate) => candidate.table === table);
+        if (!region || region.scrollWidth <= region.clientWidth + 1)
+          throw new Error(`${phase} 320px: ${table} must overflow internally: ${JSON.stringify(state)}`);
+      }
+    }
+  }
+}
+
 const PINS = [
   { id: "inv-forbid", type: "forbidden_group", personaCategory: "contractor", group: "employees" },
   { id: "inv-null", type: "null_if_missing", field: "managerId", dependsOn: "managerId" },
@@ -89,6 +155,152 @@ const HOSTILE_ID_PIN = {
   personaCategory: "contractor",
   group: "employees",
 };
+
+async function initializationFailureSession(baseUrl, fixtureCase, verifyFavicon) {
+  const cdpPort = 9800 + Math.floor(Math.random() * 400);
+  const chrome = await launchChrome({ cdpPort, url: "about:blank" });
+  const cdp = await connect(chrome.wsUrl);
+  const sessionId = await attachToPage(cdp, "about:blank");
+  const s = { cdp, sessionId };
+  const evalJs = async (expression, { awaitPromise = false } = {}) => {
+    const result = await cdp.send("Runtime.evaluate", {
+      expression,
+      returnByValue: true,
+      awaitPromise,
+    }, sessionId);
+    if (result.exceptionDetails)
+      throw new Error(`page eval threw: ${result.exceptionDetails.text} ${result.exceptionDetails.exception?.description ?? ""}`);
+    return result.result.value;
+  };
+  let personasRequests = 0;
+  let initializationErrors = 0;
+  const faviconResponses = [];
+  const requestedUrls = [];
+  const fulfillments = [];
+  const off = cdp.on((message) => {
+    if (message.sessionId !== sessionId) return;
+    if (message.method === "Network.requestWillBeSent")
+      requestedUrls.push(message.params.request.url);
+    if (message.method === "Network.responseReceived"
+        && new URL(message.params.response.url).pathname === "/favicon.svg")
+      faviconResponses.push(message.params.response.status);
+    if (message.method === "Runtime.consoleAPICalled"
+        && message.params.type === "error"
+        && message.params.args.some((argument) =>
+          argument.value === "IdentityMap Witness demo data failed validation"))
+      initializationErrors += 1;
+    if (message.method === "Fetch.requestPaused"
+        && new URL(message.params.request.url).pathname === "/data/personas.json") {
+      personasRequests += 1;
+      fulfillments.push(cdp.send("Fetch.fulfillRequest", {
+        requestId: message.params.requestId,
+        responseCode: 200,
+        responseHeaders: [{ name: "Content-Type", value: "application/json" }],
+        body: Buffer.from(fixtureCase.body).toString("base64"),
+      }, sessionId));
+    }
+  });
+  const waitFor = async (predicate, what) => {
+    for (let attempt = 0; attempt < 80; attempt++) {
+      if (await predicate().catch(() => false)) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error(`${fixtureCase.name}: timed out waiting for ${what}`);
+  };
+  const readFailureUi = () => evalJs(`(async () => ({
+    errorHidden: document.querySelector("#initialization-error").hidden,
+    errorText: document.querySelector("#initialization-error").textContent,
+    errorRole: document.querySelector("#initialization-error").getAttribute("role"),
+    errorAtomic: document.querySelector("#initialization-error").getAttribute("aria-atomic"),
+    tools: document.querySelector("#tools-badge").textContent,
+    revision: document.querySelector("#rev-badge").textContent,
+    copy1Disabled: document.querySelector("#copy-prompt-1").disabled,
+    copy2Disabled: document.querySelector("#copy-prompt-2").disabled,
+    priorityDisabled: document.querySelector("#priority-select").disabled,
+    applyDisabled: document.querySelector("#apply").disabled,
+    resetDisabled: document.querySelector("#reset-demo").disabled,
+    inspectionExposed: Object.hasOwn(window, "__imw"),
+    storeExposed: Object.hasOwn(window, "store"),
+    toolCount: typeof document.modelContext?.getTools === "function"
+      ? (await document.modelContext.getTools()).length
+      : -1,
+  }))()`, { awaitPromise: true });
+  const expectedUi = {
+    errorHidden: false,
+    errorText: "Demo data could not be loaded. Reload the page to retry.",
+    errorRole: "alert",
+    errorAtomic: "true",
+    tools: "tools: unavailable",
+    revision: "r—",
+    copy1Disabled: true,
+    copy2Disabled: true,
+    priorityDisabled: true,
+    applyDisabled: true,
+    resetDisabled: false,
+    inspectionExposed: false,
+    storeExposed: false,
+    toolCount: 0,
+  };
+
+  try {
+    await cdp.send("Runtime.enable", {}, sessionId);
+    await cdp.send("Network.enable", {}, sessionId);
+    await cdp.send("Network.setCacheDisabled", { cacheDisabled: true }, sessionId);
+    await cdp.send("Fetch.enable", {
+      patterns: [{ urlPattern: "*data/personas.json*", requestStage: "Request" }],
+    }, sessionId);
+    await cdp.send("WebMCP.enable", {}, sessionId);
+    await cdp.send("Page.navigate", { url: baseUrl }, sessionId);
+    await waitFor(
+      () => evalJs('document.querySelector("#initialization-error")?.hidden === false'),
+      "initialization alert",
+    );
+    await waitFor(async () => initializationErrors === 1, "one console error");
+    assertEq(personasRequests, 1, `${fixtureCase.name} initial personas request count`);
+    assertEq(await readFailureUi(), expectedUi, `${fixtureCase.name} failure UI`);
+
+    await evalJs('document.querySelector("#reset-demo").focus()');
+    await pressKey(s, "Enter", "Enter", 13);
+    await waitFor(async () => personasRequests >= 2, "reset personas request");
+    await waitFor(
+      () => evalJs('document.querySelector("#initialization-error")?.hidden === false'),
+      "reset initialization alert",
+    );
+    await waitFor(async () => initializationErrors === 2, "one console error after reset");
+    assertEq(personasRequests, 2, `${fixtureCase.name} reset personas request count`);
+    assertEq(await readFailureUi(), expectedUi, `${fixtureCase.name} stable reset failure UI`);
+
+    if (verifyFavicon) {
+      await waitFor(async () => faviconResponses.includes(200), "favicon response");
+      assertEq(requestedUrls.some((url) => new URL(url).pathname === "/favicon.ico"), false,
+        "browser made no favicon.ico request");
+    }
+  } finally {
+    off();
+    await Promise.allSettled(fulfillments);
+    cdp.close();
+    await chrome.close();
+  }
+}
+
+async function initializationFailureCoverage(baseUrl) {
+  const valid = JSON.parse(await readFile(new URL("../data/personas.json", import.meta.url), "utf8"));
+  const missing = structuredClone(valid).slice(0, -1);
+  const duplicate = structuredClone(valid);
+  duplicate[7].id = "P1";
+  const wrongProfile = structuredClone(valid);
+  wrongProfile[0].profiles.ad = [];
+  const cases = [
+    { name: "invalid JSON", body: "not-json" },
+    { name: "empty array", body: "[]" },
+    { name: "missing persona", body: JSON.stringify(missing) },
+    { name: "duplicate ID", body: JSON.stringify(duplicate) },
+    { name: "wrong profile structure", body: JSON.stringify(wrongProfile) },
+  ];
+  for (const [index, fixtureCase] of cases.entries())
+    await initializationFailureSession(baseUrl, fixtureCase, index === 0);
+  ok("initialization: 5 fresh-profile fail-closed cases, retry stability, zero tools/store, favicon network clean");
+}
 
 // ── layer 2 ──────────────────────────────────────────────────────────────────
 async function smokeSession(round, baseUrl) {
@@ -300,6 +512,7 @@ async function e2e(baseUrl) {
     assertEq(copyButtonCount, 2, "judge mode copy button count");
     const tagline = await s.evalJs('document.querySelector(".tagline")?.textContent');
     assertEq(tagline, "finds the smallest set of synthetic people proving every violated rule on an unsaved draft — and the proof dies when you edit what it depended on", "judge mode tagline");
+    await assertResponsiveState(s, "initial mapping", ["grid"]);
     // 1 read → r17
     const r1 = await call(1, "read_mapping_session", {});
     assertEq(r1.p.revision, 17, "round1 revision");
@@ -363,6 +576,87 @@ async function e2e(baseUrl) {
     // 3 find → witness [P2,P3,P4], evidence E1
     const r3 = await call(3, "find_mapping_counterexample", { expectedRevision: 18 });
     assertEq(r3.p.personaIds, ["P2", "P3", "P4"], "round3 witness");
+    const matrixButtons = await s.evalJs(`([...document.querySelectorAll(".matrix-select")].map((button) => ({
+      personaId: button.dataset.personaId,
+      field: button.dataset.field,
+      invariantId: button.closest("tr").querySelector("td.viol").textContent,
+      name: button.getAttribute("aria-label"),
+      controls: button.getAttribute("aria-controls"),
+      expanded: button.getAttribute("aria-expanded"),
+    })))`);
+    assertEq(matrixButtons.length, r3.p.violations.length, "round3 matrix button count");
+    assertEq(matrixButtons.map((button) => button.name), r3.p.violations.map((violation) =>
+      `Show provenance for persona ${violation.personaId}, field ${violation.field}, invariant ${violation.invariantId}`),
+    "round3 matrix button accessible names");
+    assertEq(matrixButtons.every((button) => button.controls === "provenance"), true,
+      "round3 matrix buttons control provenance");
+    assertEq(matrixButtons.every((button) => button.expanded === "false"), true,
+      "round3 matrix buttons start collapsed");
+    const firstMatrixButton = matrixButtons[0];
+    assertEq(await s.evalJs(`(() => {
+      document.querySelector(".matrix-select").focus();
+      return document.activeElement === document.querySelector(".matrix-select");
+    })()`), true, "round3 first matrix button focused");
+    await pressKey(s, "Enter", "Enter", 13);
+    const enterState = await s.evalJs(`(() => {
+      const buttons = [...document.querySelectorAll(".matrix-select")];
+      const target = buttons.find((button) =>
+        button.dataset.personaId === ${JSON.stringify(firstMatrixButton.personaId)}
+        && button.dataset.field === ${JSON.stringify(firstMatrixButton.field)});
+      return {
+        active: document.activeElement === target,
+        expanded: target.getAttribute("aria-expanded"),
+        expandedCount: buttons.filter((button) => button.getAttribute("aria-expanded") === "true").length,
+        provenanceHidden: document.querySelector("#provenance").hidden,
+        railText: document.querySelector("#rail").textContent,
+      };
+    })()`);
+    assertEq(enterState.active, true, "round3 Enter restores matrix focus");
+    assertEq(enterState.expanded, "true", "round3 Enter expands selected violation");
+    assertEq(enterState.expandedCount, 1, "round3 Enter leaves one expanded violation");
+    assertEq(enterState.provenanceHidden, false, "round3 Enter opens provenance");
+    assertEq(enterState.railText.includes(`${firstMatrixButton.personaId} · ${firstMatrixButton.field}`), true,
+      "round3 Enter shows selected provenance");
+
+    const nextMatrixButton = matrixButtons.find((button) =>
+      button.field === "department"
+      && (button.personaId !== firstMatrixButton.personaId || button.field !== firstMatrixButton.field));
+    if (!nextMatrixButton) throw new Error("round3 missing a second department violation for Space test");
+    assertEq(await s.evalJs(`(() => {
+      const target = [...document.querySelectorAll(".matrix-select")].find((button) =>
+        button.dataset.personaId === ${JSON.stringify(nextMatrixButton.personaId)}
+        && button.dataset.field === ${JSON.stringify(nextMatrixButton.field)});
+      target.focus();
+      return document.activeElement === target;
+    })()`), true, "round3 second matrix button focused");
+    await pressKey(s, " ", "Space", 32);
+    const spaceState = await s.evalJs(`(() => {
+      const buttons = [...document.querySelectorAll(".matrix-select")];
+      const previous = buttons.find((button) =>
+        button.dataset.personaId === ${JSON.stringify(firstMatrixButton.personaId)}
+        && button.dataset.field === ${JSON.stringify(firstMatrixButton.field)});
+      const target = buttons.find((button) =>
+        button.dataset.personaId === ${JSON.stringify(nextMatrixButton.personaId)}
+        && button.dataset.field === ${JSON.stringify(nextMatrixButton.field)});
+      return {
+        active: document.activeElement === target,
+        previousExpanded: previous.getAttribute("aria-expanded"),
+        targetExpanded: target.getAttribute("aria-expanded"),
+        expandedCount: buttons.filter((button) => button.getAttribute("aria-expanded") === "true").length,
+        provenanceHidden: document.querySelector("#provenance").hidden,
+        provenanceTable: Boolean(document.querySelector("#provenance .table-scroll table")),
+        railText: document.querySelector("#rail").textContent,
+      };
+    })()`);
+    assertEq(spaceState.active, true, "round3 Space restores matrix focus");
+    assertEq(spaceState.previousExpanded, "false", "round3 Space collapses previous violation");
+    assertEq(spaceState.targetExpanded, "true", "round3 Space expands new violation");
+    assertEq(spaceState.expandedCount, 1, "round3 Space leaves one expanded violation");
+    assertEq(spaceState.provenanceHidden, false, "round3 Space keeps provenance open");
+    assertEq(spaceState.provenanceTable, true, "round3 department provenance renders a table");
+    assertEq(spaceState.railText.includes(`${nextMatrixButton.personaId} · ${nextMatrixButton.field}`), true,
+      "round3 Space switches provenance content");
+    await assertResponsiveState(s, "dynamic matrix", ["matrix", "provenance"]);
     const E1 = r3.p.evidenceIds;
     // 4 human fixes managerId (r19); E1 must go stale — and only via fingerprint
     const manager4 = await humanExpression(4, "managerId", "user.managerId");
@@ -537,9 +831,16 @@ async function e2e(baseUrl) {
     assertEq(valid12.errorHidden, true, "round12 valid expression clears inline error");
 
     const sha = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
-    const out = `eval/out/relay-${sha}.json`;
-    await writeFile(new URL(`../${out}`, import.meta.url),
-      JSON.stringify({ sha, when: new Date().toISOString(), rounds: 12, trace }, null, 2));
+    const configuredTrace = process.env.IMW_E2E_TRACE_PATH;
+    if (configuredTrace && !configuredTrace.startsWith("/"))
+      throw new Error("IMW_E2E_TRACE_PATH must be absolute");
+    const out = configuredTrace ?? `eval/out/relay-${sha}.json`;
+    const destination = configuredTrace
+      ? new URL(`file://${configuredTrace}`)
+      : new URL(`../${out}`, import.meta.url);
+    await writeFile(destination,
+      JSON.stringify({ sha, when: new Date().toISOString(), rounds: 12, trace }, null, 2),
+      { flag: "wx" });
     ok(`e2e: 12 rounds green — stale rejection (r5), mismatch recovery (r9), pin-coverage flip (r10), packet freshness recovery (r11), inline validation (r12); trace → ${out}`);
   } finally {
     s.cdp.close();
@@ -554,8 +855,9 @@ try {
     for (let round = 1; round <= 3; round++) await smokeSession(round, baseUrl);
     console.log("SMOKE PASS (3 cold sessions)");
   } else if (MODE === "--e2e") {
+    await initializationFailureCoverage(baseUrl);
     await e2e(baseUrl);
-    console.log("E2E PASS (12 rounds)");
+    console.log("E2E PASS (12 rounds + 5 fail-closed starts)");
   } else {
     fail(`unknown mode ${MODE}`);
   }
