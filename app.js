@@ -1,5 +1,10 @@
 // Top-level entry module — the ONLY legal registerTool call site (tests/toplevel.test.mjs).
-import { TOOLS, runTool, GOLDEN_STATE } from "./src/tools/defs.mjs";
+import {
+  TOOLS,
+  GOLDEN_STATE,
+  createToolExecutor,
+  registerToolDefinitions,
+} from "./src/tools/defs.mjs";
 import { createStore, packetFresh } from "./src/store/reducer.mjs";
 import { evaluateAll } from "./src/engine/witness.mjs";
 import { parse } from "./src/engine/parser.mjs";
@@ -11,8 +16,7 @@ const COPY_PROMPT_1 = "Read the mapping session on this page. Stage exactly thes
 const COPY_PROMPT_2 = "I confirmed the rules. Re-read the session, then find the minimal counterexample set. Walk me through fixing every violation: tell me exactly which expression or the priority order to change in the page UI. After each of my edits, re-find at the current revision. When violations reach zero, prepare the review packet from the fresh evidence ids.";
 
 const $ = (sel) => document.querySelector(sel);
-const esc = (v) => String(v).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
-const show = (v) => v === null ? "∅ null" : v === "" ? '"" empty' : esc(v);
+const show = (v) => v === null ? "∅ null" : v === "" ? '"" empty' : String(v);
 const allClear = document.createElement("div");
 allClear.id = "all-clear";
 allClear.className = "hint";
@@ -110,23 +114,57 @@ function renderRail(outs) {
   if (!cell) { section.hidden = true; return; }
   section.hidden = false;
   const p = cell.prov;
-  let html = `<div class="rail-head">${sel.personaId} · ${sel.field} → ${show(cell.value)}`
-    + ` <span class="hint">(source: ${p.source ?? "∅"}${p.branch ? ` · branch: ${p.branch}` : ""})</span></div>`;
+  const rail = $("#rail");
+  rail.replaceChildren();
+  const head = document.createElement("div");
+  head.className = "rail-head";
+  head.append(document.createTextNode(`${sel.personaId} · ${sel.field} → ${show(cell.value)} `));
+  const source = document.createElement("span");
+  source.className = "hint";
+  source.textContent = `(source: ${p.source ?? "∅"}${p.branch ? ` · branch: ${p.branch}` : ""})`;
+  head.append(source);
+  rail.append(head);
   if (p.candidates.length) {
-    html += `<table><thead><tr><th>source (priority order)</th><th>present</th><th>value</th><th></th></tr></thead><tbody>`;
+    const table = document.createElement("table");
+    const header = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    for (const label of ["source (priority order)", "present", "value", ""]) {
+      const heading = document.createElement("th");
+      heading.textContent = label;
+      headerRow.append(heading);
+    }
+    header.append(headerRow);
+    const body = document.createElement("tbody");
     for (const c of p.candidates) {
       const cls = c.source === p.source ? "winner" : c.present ? "loser" : "absent";
       const note = c.source === p.source ? "← wins" : c.present ? "loses (later in priority)" : "absent";
-      html += `<tr><td>${c.source}</td><td>${c.present ? "yes" : "no"}</td>`
-        + `<td class="${cls}">${c.present ? show(c.value) : "—"}</td><td class="${cls}">${note}</td></tr>`;
+      const row = document.createElement("tr");
+      for (const [value, className] of [
+        [c.source, ""],
+        [c.present ? "yes" : "no", ""],
+        [c.present ? show(c.value) : "—", cls],
+        [note, cls],
+      ]) {
+        const item = document.createElement("td");
+        if (className) item.className = className;
+        item.textContent = value;
+        row.append(item);
+      }
+      body.append(row);
     }
-    html += `</tbody></table>`;
+    table.append(header, body);
+    rail.append(table);
   } else if (p.inputs.length) {
-    html += `<div class="hint">inputs: ${p.inputs.map((i) => `${esc(i.ref)} (${i.source ?? "∅"})`).join(" · ")}</div>`;
+    const inputs = document.createElement("div");
+    inputs.className = "hint";
+    inputs.textContent = `inputs: ${p.inputs.map((i) => `${i.ref} (${i.source ?? "∅"})`).join(" · ")}`;
+    rail.append(inputs);
   } else {
-    html += `<div class="hint">literal value — no source resolution involved</div>`;
+    const literal = document.createElement("div");
+    literal.className = "hint";
+    literal.textContent = "literal value — no source resolution involved";
+    rail.append(literal);
   }
-  $("#rail").innerHTML = html;
 }
 
 function render() {
@@ -153,13 +191,36 @@ function render() {
       chips[field] = "unavailable";
     }
   }
-  $("#grid tbody").innerHTML = Object.entries(s.expressions)
-    .map(([f, e]) => `<tr><td>${f}</td><td class="expression-cell">`
-      + `<label class="visually-hidden" for="expression-${f}">Expression for ${f}</label>`
-      + `<input id="expression-${f}" data-field="${f}" value="${esc(e)}" aria-invalid="false" aria-describedby="expression-error-${f}">`
-      + `<div id="expression-error-${f}" class="expression-error" aria-live="polite" hidden></div>`
-      + `</td><td class="prov-chip">${chips[f]}</td></tr>`)
-    .join("");
+  const gridBody = $("#grid tbody");
+  gridBody.replaceChildren();
+  for (const [field, expression] of Object.entries(s.expressions)) {
+    const row = document.createElement("tr");
+    const fieldCell = document.createElement("td");
+    fieldCell.textContent = field;
+    const expressionCell = document.createElement("td");
+    expressionCell.className = "expression-cell";
+    const label = document.createElement("label");
+    label.className = "visually-hidden";
+    label.htmlFor = `expression-${field}`;
+    label.textContent = `Expression for ${field}`;
+    const input = document.createElement("input");
+    input.id = `expression-${field}`;
+    input.dataset.field = field;
+    input.value = expression;
+    input.setAttribute("aria-invalid", "false");
+    input.setAttribute("aria-describedby", `expression-error-${field}`);
+    const error = document.createElement("div");
+    error.id = `expression-error-${field}`;
+    error.className = "expression-error";
+    error.setAttribute("aria-live", "polite");
+    error.hidden = true;
+    expressionCell.append(label, input, error);
+    const provenanceCell = document.createElement("td");
+    provenanceCell.className = "prov-chip";
+    provenanceCell.textContent = chips[field];
+    row.append(fieldCell, expressionCell, provenanceCell);
+    gridBody.append(row);
+  }
   for (const input of document.querySelectorAll("#grid input")) {
     input.addEventListener("change", (ev) => {
       const error = ev.target.parentElement.querySelector(".expression-error");
@@ -277,7 +338,7 @@ function render() {
   $("#apply").disabled = !(fresh && pkt.blockers.length === 0);
 }
 
-const present = typeof document.modelContext !== "undefined" && document.modelContext !== null;
+const present = typeof document.modelContext?.registerTool === "function";
 $("#origin-badge").textContent = `origin: ${location.host}`;
 $("#mc-badge").textContent = `modelContext: ${present ? "present" : "absent"}`;
 $("#mc-badge").classList.add(present ? "on" : "off");
@@ -299,38 +360,66 @@ for (const [selector, prompt, label] of [
   });
 }
 $("#reset-demo").addEventListener("click", () => location.reload());
-$("#apply").addEventListener("click", () => alert("Apply stays human-only, and this demo never exercises it."));
+$("#apply").addEventListener("click", () => alert("Apply is a manual page control, is not exposed as a WebMCP tool, and this demo never exercises it."));
 
+const lifecycle = new AbortController();
+window.addEventListener("pagehide", (event) => {
+  if (!event.persisted) lifecycle.abort();
+});
 let registeredCount = 0;
 if (present) {
-  for (const t of TOOLS) {
-    document.modelContext.registerTool({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema,
-      annotations: t.annotations,
-      execute: async (args) => {
-        const r = runTool(store, personas, t.name, args ?? {});
-        if (r.ok && t.name === "find_mapping_counterexample") {
-          if (r.payload.cleanSweep) {
-            ui.lastSweep = r.payload;
-            if (r.payload.fullSweep) { ui.lastFind = r.payload; ui.selected = null; }
+  const registration = await registerToolDefinitions(
+    TOOLS,
+    (definition, options) => document.modelContext.registerTool(definition, options),
+    (tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      annotations: tool.annotations,
+      execute: createToolExecutor(store, personas, tool.name, (result) => {
+        if (result.ok && tool.name === "find_mapping_counterexample") {
+          if (result.payload.cleanSweep) {
+            ui.lastSweep = result.payload;
+            if (result.payload.fullSweep) { ui.lastFind = result.payload; ui.selected = null; }
           } else {
-            ui.lastFind = r.payload;
+            ui.lastFind = result.payload;
             ui.lastSweep = null;
             ui.selected = null;
           }
         }
-        if (r.ok && t.name === "prepare_mapping_review") ui.lastPacket = r.payload;
+        if (result.ok && tool.name === "prepare_mapping_review") ui.lastPacket = result.payload;
         render(); // UI updates BEFORE the tool returns (SPEC §7)
-        return { content: [{ type: "text", text: JSON.stringify(r.ok ? r.payload : { error: r.error }) }] };
-      },
-    });
-    registeredCount += 1;
-  }
+      }),
+    }),
+    lifecycle.signal,
+    (count) => {
+      registeredCount = count;
+      $("#tools-badge").textContent = `tools: ${count}/5 registering`;
+      $("#tools-badge").classList.add("off");
+    },
+  );
+  registeredCount = registration.registeredCount;
+  $("#tools-badge").textContent = registration.failed
+    ? "tools: registration failed"
+    : `tools: ${registeredCount}/5 registered`;
+  $("#tools-badge").classList.remove("on", "off");
+  $("#tools-badge").classList.add(!registration.failed && registeredCount === 5 ? "on" : "off");
+} else {
+  $("#tools-badge").textContent = "tools: 0/5 registered";
+  $("#tools-badge").classList.remove("on", "off");
+  $("#tools-badge").classList.add("off");
 }
-$("#tools-badge").textContent = `tools: ${registeredCount}/5 registered`;
-$("#tools-badge").classList.add(registeredCount === 5 ? "on" : "off");
 
 render();
-window.__imw = { store, render, runTool, personas, registeredCount, ui };
+const inspection = Object.freeze({
+  state: () => structuredClone(store.getState()),
+  snapshot: () => structuredClone(store.snapshot()),
+  personas: () => structuredClone(personas),
+  ui: () => structuredClone(ui),
+  registeredToolCount: () => registeredCount,
+});
+Object.defineProperty(window, "__imw", {
+  value: inspection,
+  writable: false,
+  configurable: false,
+});

@@ -9,6 +9,10 @@ test("scripted human actions mutate the page only through DOM events", () => {
     "harness must contain zero store.dispatch occurrences");
   assert.equal((source.match(/__imw\.render\(\)/g) ?? []).length, 0,
     "harness must contain zero __imw.render() occurrences");
+  assert.equal((source.match(/__imw\.store/g) ?? []).length, 0,
+    "harness must never receive the mutable store");
+  assert.equal((source.match(/__imw\.runTool/g) ?? []).length, 0,
+    "harness must invoke tools only through WebMCP");
   assert.equal((source.match(/human-sim/g) ?? []).length, 0,
     "legacy human-sim trace entries must stay removed");
 

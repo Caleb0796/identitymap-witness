@@ -65,7 +65,7 @@ Measured in ~/mcp/outpocket (evidence/V0–V6, harness/drive.mjs) 2026-08-29:
 | C7 | `WebMCP.enable` returns OK with no page API — presence check is the completed round trip, nothing else | drive.mjs |
 | C8 | Registration top-level document only; iframe/worker registration silently does nothing | HANDOVER §3 r11 |
 | C9 | Remote HTTPS origins show a consent gate in the ChatGPT browser; localhost doesn't. Video records against the deployed remote origin, consent click included | V6 |
-| C10 | Registration shape (working in prod): `document.modelContext.registerTool({name, description, inputSchema, annotations, execute: async (args) => ({content:[{type:"text", text}]})}[, {signal}])`. The `{signal}` second argument is OPTIONAL and unused here (no dynamic unregistration in scope) | probe/index.html |
+| C10 | Registration shape: `await Promise.resolve(document.modelContext.registerTool({name, description, inputSchema, annotations, execute: async (args, {signal}) => ({content:[{type:"text", text}]})}, {signal: pageLifetimeSignal}))`. Registration may return void or a Promise; an already-aborted invocation does not enter a handler, and non-BFCache page teardown aborts the page-lifetime signal | probe/index.html |
 
 ## 4. Golden state (defective by design — this IS the demo)
 
@@ -112,10 +112,12 @@ Minimal witness over violated invariants: size **3** — `[P2,P3,P4]` or `[P2,P3
 
 Every submitted invariant set has 1–8 rules. Each rule has exactly the keys shown
 for its type plus optional `id`; resolved IDs (`id` or `pin-N`) are non-empty and
-unique. `field` is one of `displayName`, `group`, `managerId`, `department`, or
-`email`; `source` is one of `okta`, `hris`, or `ad`; all other rule values are
-non-empty strings. Extra keys, wrong value types, and any string containing the
-reserved `CANARY_` prefix fail `BAD_RULE` before a proposal is staged. Valid rules
+unique. An id is at most 64 characters and other free-form rule text is at most
+128 characters. `field` is one of `displayName`, `group`, `managerId`, `department`,
+or `email`; `source` is one of `okta`, `hris`, or `ad`; all other rule values are
+non-empty strings. Transport shape, type, and size failures use `INVALID_INPUT`;
+unknown rule semantics, duplicate resolved rule ids, unsupported enums, and any
+string containing the reserved `CANARY_` sentinel use `BAD_RULE`. Valid rules
 are recursively canonicalized by object-key order. The pending proposal carries an
 eight-digit FNV-1a content fingerprint over that canonical JSON; this is a
 non-cryptographic display digest, never a signature, and equality is always checked
@@ -127,8 +129,9 @@ Semantics (`src/engine/invariants.mjs`):
 - `forbidden_group`: persona.category matches (case-insensitive) ⇒ mapped group value
   must not equal `group` (case-insensitive compare — the CHECKER is case-robust; the
   defective EXPRESSION is not; that asymmetry is DC1).
-- `null_if_missing`: if no source supplies `dependsOn`, target MUST be `null` — `""` fails.
-- `source_of_truth`: whenever the named source has a non-null, non-empty value for
+- `null_if_missing`: a source supplies `dependsOn` only when its profile owns that
+  JSON property. If no source supplies it, target MUST be `null` — `""` fails.
+- `source_of_truth`: whenever the named source owns a non-null, non-empty value for
   `field`, the target's provenance.source must equal it.
 
 ## 6. Expression language subset
@@ -144,8 +147,10 @@ ident   := "user" "." NAME
 call    := ("String.toUpperCase" | "String.toLowerCase") "(" expr ")"
 ```
 Semantics:
-- `user.X` resolves through `[...priority, "okta"]`; first source with X **present
-  (`in`)** wins; present-but-`""` wins over later sources (DC4's trap).
+- `user.X` resolves through `[...priority, "okta"]`; first source with X as an
+  **own JSON property** wins. Prototype-chain properties are absent unless an
+  identically named own property is explicitly present; present-but-`""` wins over
+  later sources (DC4's trap).
 - missing everywhere → `null`. `""` is present-and-empty, not null.
 - `null` poisons concat (`null + "x" → null`); `"" + "x" → "x"`.
 - `"" == null` → false; `null == null` → true. Equality on strings is exact-case.
@@ -158,9 +163,13 @@ Semantics:
 ## 7. Tools — complete contracts (5, top-level, no more)
 
 Common rules: input `expectedRevision` required on every tool except
-`read_mapping_session`; it is a nonnegative integer, and a mismatch takes
-precedence over later handler validation → error `REVISION_MISMATCH` with
-`{currentRevision}`. Tool object schemas reject additional properties. Every
+`read_mapping_session`; it is a nonnegative safe integer at most
+`Number.MAX_SAFE_INTEGER`. Application code enforces the contract even if a draft
+WebMCP implementation does not validate JSON Schema. Error precedence is: a
+non-plain/non-JSON top-level input or invalid revision → `INVALID_INPUT`; a valid
+but stale revision → `REVISION_MISMATCH {currentRevision}` before remaining
+arguments; then remaining shape/type/budget validation; then domain validation.
+Tool object schemas reject additional properties. Every
 success payload includes `revision`. One text content item;
 `JSON.stringify(payload).length <= 1500` (over-budget → violations trimmed to ids-only
 and the list capped to fit, with `truncated:true` + `violationsTotal`; irreducibly
@@ -168,6 +177,12 @@ over → `EVALUATOR_FAILED`). UI renders BEFORE return. Every tool has
 `untrustedContentHint:true`; only `read_mapping_session` has `readOnlyHint:true`.
 The other four use `readOnlyHint:false` because they stage pending state or record
 derived evidence/packets. Hints are not security. No apply/save/push tool exists.
+All failed calls restore the full snapshot, including both hidden allocators.
+
+Caller-controlled limits are: 8 invariants; invariant ids 64 characters; other
+rule text 128; expressions 512; 8 invariant ids; 8 persona ids of 64 characters;
+16 evidence ids of 32 characters; evidence ids match `E-<positive integer>`.
+All id arrays are unique. These same limits appear in JSON Schema and runtime code.
 
 **read_mapping_session** (readOnly true)
 - in: `{}` — out: `{revision, priority, fields: [{field, expr, defectFree: null}],
@@ -187,8 +202,8 @@ derived evidence/packets. Hints are not security. No apply/save/push tool exists
   nextStep:"the human must review and confirm the pending rules on the page; then call read_mapping_session"}`.
 
 **find_mapping_counterexample** (readOnly false — records evidence, no draft change)
-- in: `{expectedRevision, invariantIds: [string], maxPersonas?: integer}` where
-  `maxPersonas` is 1–8.
+- in: `{expectedRevision, invariantIds?: [string], maxPersonas?: integer}` where
+  `invariantIds` has at most 8 unique ids and `maxPersonas` is 1–8.
 - Evaluates ALL personas × ALL expressions, checks the named pins, exhaustive
   minimal witness (2^8 subsets max). A violating success returns `{revision,
   cleanSweep:false, fullSweep, checkedInvariantIds, personaIds, violations:
@@ -202,7 +217,7 @@ derived evidence/packets. Hints are not security. No apply/save/push tool exists
   matrix or presents a global all-clear; only `cleanSweep && fullSweep` renders
   `clean sweep — 0 violations across {checked} personas at r{revision}`. The
   result remains citable evidence. Unknown pin id → `BAD_RULE`. Invalid
-  `maxPersonas` → `BAD_RULE`; an effective checked pin set of zero →
+  `maxPersonas` shape/range → `INVALID_INPUT`; an effective checked pin set of zero →
   `NO_INVARIANTS` and no evidence. With a pending-only proposal, its reason says
   pending rules await human confirmation; otherwise it says “no pinned invariants —
   ask the human to pin business rules first”. A minimal witness larger than `maxPersonas` →
@@ -210,16 +225,20 @@ derived evidence/packets. Hints are not security. No apply/save/push tool exists
   → `EVALUATOR_FAILED`.
 
 **preview_mapping_patch** (readOnly false — records evidence, DOES NOT edit the draft)
-- in: `{expectedRevision, field, expr, personaIds: [string]}`
+- in: `{expectedRevision, field, expr, personaIds: [string]}` where `field` is a
+  defined output field, `expr` is at most 512 characters, and `personaIds` contains
+  1–8 unique ids.
 - Parses `expr` (→ `INVALID_AST {position}`), evaluates ONLY the named personas
   under draft-with-patch-overlaid, re-checks all pins on the patched field.
   out: `{revision, field, diffs: [{personaId, before, after}], remainingViolations,
-  evidenceId}` (identity-field diffs are `"<redacted:changed>"`). Unknown persona →
+  evidenceId}` (`firstName`, `lastName`, `email`, `displayName`, and `managerId`
+  diffs are `"<redacted:changed>"`). Unknown persona →
   `UNKNOWN_PERSONA`. The human applies the patch by editing the UI themselves —
   the tool never writes the draft (that keeps the human the author of every edit).
 
 **prepare_mapping_review** (readOnly false — records a packet)
-- in: `{expectedRevision, evidenceIds: [string]}`
+- in: `{expectedRevision, evidenceIds: [string]}` with 0–16 unique ids matching
+  `E-<positive integer>`.
 - With zero confirmed pinned invariants, fails `NO_INVARIANTS` (including while
   unconfirmed rules are pending); otherwise an empty
   `evidenceIds` array fails `NO_EVIDENCE`. These gates precede evidence lookup and
@@ -279,26 +298,40 @@ an okta/hris/ad source profile, their values use the corresponding canary format
 `CANARY_FN_<id>` / `CANARY_LN_<id>` / `CANARY_EM_<id>@example.invalid`. Every
 okta profile carries at least `firstName`; hris/ad profiles may omit identity
 keys. The redaction walk covers payload keys AND values AND nested candidates/diffs.
-Any `CANARY_` substring in any tool result at any point = layer-1 failure + kill
-K2. Allowed out: persona ids, category labels, field names, provenance source
-names, booleans, and non-identity value diffs.
+`CANARY_` is a synthetic fixture tripwire, not a general PII detector. The concrete
+output boundary minimizes diffs for `firstName`, `lastName`, `email`, `displayName`,
+and `managerId`; invariant details never include raw evaluated or source-of-truth
+values. They retain invariant id, persona id, field, expected source, and actual
+source where applicable. Any `CANARY_` substring in any tool result at any point =
+layer-1 failure + kill K2. Allowed out: synthetic persona ids, category labels,
+field names, provenance source names, booleans, and non-identity value diffs. This
+claim is scoped to the eight synthetic personas; no real identity provider is wired.
 
 ## 10. UI + deploy layout
 
-Page lives at REPO ROOT (`index.html`, `style.css`, `app.js` importing
-`./src/...`, fetching `./data/personas.json`) so one static publish of `.` serves
-everything (fixes the review's 404 finding; `render.yaml` publishes `.`).
-Test hook: `window.__imw = {store, render, runTool}` — the harness uses it to
-inspect state while real expression changes and pending confirm/discard actions
-are driven through DOM controls; documented as a test surface, not an API.
+Page sources live at the repo root, while `render.yaml` publishes a generated,
+curated `public` directory containing only `index.html`, `style.css`, `app.js`,
+`data/personas.json`, and the recursively discovered ESM dependency graph. The
+local server enforces the same public asset boundary and rejects repository
+internals. `window.__imw` is a frozen inspection-only test surface: every exposed
+member is a function returning a structured clone. It exposes no store, dispatch,
+restore, renderer, tool runner, mutable personas, or mutable UI object. Real
+expression changes and pending confirm/discard actions are driven through DOM controls.
 Components: mapping grid (field / editable expr / provenance chip), priority
 select, confirmed invariant chips, a pending-rules region showing every canonical
 field plus version and non-cryptographic digest, version-bound Confirm all/Discard
 buttons, counterexample matrix (persona × invariant), provenance rail (candidates
 chain, losing sources visible), packet panel with blockers +
 stale watermark, revision badge, Apply disabled-unless-green and never used.
-All rule-controlled pending, confirmed-pin, and matrix text is built with
-`createElement` and `textContent`, never HTML parsing.
+All rule-controlled pending, confirmed-pin, grid, matrix, and provenance content is
+built with `createElement` and `textContent`, never HTML parsing.
+
+Confirm, discard, unpin, expression editing, priority selection, and Apply are
+manual page controls and are not exposed as WebMCP tools. That is a protocol
+boundary, not proof that only a person can click: a browser agent or extension with
+general page-control authority may operate DOM controls. Any future privileged
+deployment needs browser-mediated or out-of-band authorization rather than a DOM
+label or `event.isTrusted` check.
 
 ## 11. Demo beats (single direction, updated to golden walk)
 

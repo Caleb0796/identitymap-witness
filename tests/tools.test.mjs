@@ -79,7 +79,7 @@ test("BAD_RULE: unknown type, missing field, unknown invariantId; pin replace no
   assert.equal(r.error.code, "BAD_RULE");
   r = runTool(store, personas, "stage_mapping_invariants",
     { expectedRevision: 17, invariants: [{ id: "x", type: "forbidden_group", personaCategory: "c" }] });
-  assert.equal(r.error.code, "BAD_RULE");
+  assert.equal(r.error.code, "INVALID_INPUT");
 
   assert.ok(stagePins(store, personas).ok); // r18
   r = runTool(store, personas, "find_mapping_counterexample", { expectedRevision: 18, invariantIds: ["ghost"] });
@@ -112,7 +112,7 @@ test("a clean snapshot returns successful closing evidence", async () => {
   assert.deepEqual(prep.payload.blockers, []);
 });
 
-test("INVALID_AST with position; UNKNOWN_PERSONA; unknown target field", async () => {
+test("INVALID_AST with position; UNKNOWN_PERSONA; invalid target field", async () => {
   const { store, personas } = await golden();
   let r = runTool(store, personas, "preview_mapping_patch",
     { expectedRevision: 17, field: "group", expr: "fetch('x')", personaIds: ["P2"] });
@@ -123,7 +123,7 @@ test("INVALID_AST with position; UNKNOWN_PERSONA; unknown target field", async (
   assert.equal(r.error.code, "UNKNOWN_PERSONA");
   r = runTool(store, personas, "preview_mapping_patch",
     { expectedRevision: 17, field: "nope", expr: '"x"', personaIds: ["P2"] });
-  assert.equal(r.error.code, "INVALID_AST");
+  assert.equal(r.error.code, "INVALID_INPUT");
 });
 
 test("STALE_EVIDENCE: a human edit between find and prepare rejects the packet", async () => {
@@ -194,4 +194,75 @@ test("error precedence: stale revision wins over INVALID_AST and UNKNOWN_PERSONA
   const r = runTool(store, personas, "preview_mapping_patch",
     { expectedRevision: 99, field: "group", expr: "fetch('x')", personaIds: ["P99"] });
   assert.equal(r.error.code, "REVISION_MISMATCH");
+});
+
+test("prototype-chain fields cannot create a false clean sweep or GREEN packet", async () => {
+  const personas = await load("personas.json");
+  assert.equal(personas.some((persona) => ["okta", "hris", "ad"]
+    .some((source) => Object.hasOwn(persona.profiles?.[source] ?? {}, "toString"))), false);
+  const store = createStore(GOLDEN_STATE);
+  const staged = runTool(store, personas, "stage_mapping_invariants", {
+    expectedRevision: 17,
+    invariants: [{
+      id: "proto-chain",
+      type: "null_if_missing",
+      field: "group",
+      dependsOn: "toString",
+    }],
+  });
+  assert.equal(staged.ok, true);
+  store.dispatch({ type: "CONFIRM_RULES", version: staged.payload.pendingVersion });
+  const found = runTool(store, personas, "find_mapping_counterexample", { expectedRevision: 18 });
+  assert.equal(found.ok, true);
+  assert.equal(found.payload.cleanSweep, false);
+  assert.ok(found.payload.violations.length > 0);
+  const prepared = runTool(store, personas, "prepare_mapping_review", {
+    expectedRevision: 18,
+    evidenceIds: found.payload.evidenceIds,
+  });
+  assert.equal(prepared.ok, true);
+  assert.deepEqual(prepared.payload.blockers, [{ pin: "proto-chain", reason: "violating" }]);
+});
+
+test("non-canary manager ids and raw invariant values never leave tool envelopes", () => {
+  const marker = "PRIVATE_MANAGER_42";
+  const personas = [
+    { id: "Q1", category: "employee", profiles: {
+      okta: {}, hris: { managerId: marker }, ad: { managerId: "OTHER_MANAGER" },
+    } },
+    { id: "Q2", category: "employee", profiles: {
+      okta: { managerId: marker }, hris: {}, ad: {},
+    } },
+  ];
+  const pins = [
+    { id: "sot", type: "source_of_truth", field: "managerId", source: "hris" },
+    { id: "null", type: "null_if_missing", field: "managerId", dependsOn: "employeeNumber" },
+  ];
+  const store = createStore({ ...GOLDEN_STATE, pins });
+  const found = runTool(store, personas, "find_mapping_counterexample", { expectedRevision: 17 });
+  const preview = runTool(store, personas, "preview_mapping_patch", {
+    expectedRevision: 17,
+    field: "managerId",
+    expr: "user.managerId",
+    personaIds: ["Q2"],
+  });
+  const error = runTool(store, personas, "preview_mapping_patch", {
+    expectedRevision: 17,
+    field: "managerId",
+    expr: "user.",
+    personaIds: ["Q2"],
+  });
+  assert.equal(found.ok, true);
+  assert.ok(found.payload.violations.some((violation) => violation.invariantId === "sot"));
+  assert.ok(found.payload.violations.some((violation) => violation.invariantId === "null"));
+  assert.equal(preview.ok, true);
+  assert.deepEqual(preview.payload.diffs[0], {
+    personaId: "Q2",
+    field: "managerId",
+    before: "<redacted:changed>",
+    after: "<redacted:changed>",
+  });
+  assert.equal(error.error.code, "INVALID_AST");
+  for (const envelope of [found, preview, error])
+    assert.equal(JSON.stringify(envelope).includes(marker), false);
 });

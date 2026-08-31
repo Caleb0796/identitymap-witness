@@ -5,8 +5,8 @@
 This WebMCP Challenge entry is a profile-mapping workbench. A human defines the
 business invariants; five page-authored `document.modelContext` tools let an agent
 inspect the unsaved draft, find an exhaustive minimal counterexample set, preview
-redacted fixes, and prepare a revision-bound review packet. The agent cannot save
-or Apply changes.
+redacted fixes, and prepare a revision-bound review packet. No WebMCP tool can save
+or apply changes.
 
 **Live demo:** https://identitymap-witness.onrender.com
 
@@ -19,7 +19,7 @@ or Apply changes.
   reports 4/4 seeded defect classes, the audited size-3 oracle witness, zero
   write-oracle/hash/PII failures, `oracleAudited: true`, and no watermark. Generated
   eval output is intentionally git-ignored; reproduce it with `node eval/run.mjs`.
-- Final `npm test` count: **210 tests, 210 passed, 0 failed, 0 skipped**. No
+- Final `npm test` count: **264 tests, 264 passed, 0 failed, 0 skipped**. No
   coverage percentage is claimed.
 - The remaining entry work is human-run model evaluation, final video capture,
   public-repository verification, and submission. See
@@ -42,7 +42,8 @@ control that only reloads the page.
    dependent evidence; after each edit the agent re-reads/re-finds at the current
    revision and prepares only from fresh evidence ids.
 
-Apply remains a human-only page control and is outside the demo path.
+Apply remains a manual page control, is not exposed as a WebMCP tool, and is outside
+the demo path.
 
 ## Five WebMCP tools
 
@@ -102,6 +103,13 @@ connected. FNV-1a fingerprints identify visible canonical content but are not
 cryptographic signatures. Browser-Use and Full-CDP comparisons are designed, not
 run. The persisted-state API comparison is a by-construction ablation, not a
 competitive benchmark.
+
+Privacy claims are deliberately exact: `CANARY_` is a synthetic test tripwire, not
+a general PII detector. Tool output minimizes `firstName`, `lastName`, `email`,
+`displayName`, and `managerId` diffs and never embeds raw invariant values in
+violation details. A browser agent or extension with general page-control authority
+may still click manual DOM controls; a future privileged deployment would require
+browser-mediated or out-of-band authorization, not a “human-only” label.
 
 Read the exact contract in [`SPEC.md`](SPEC.md), the reproducible gates in
 [`EVAL.md`](EVAL.md), and the oracle derivation in

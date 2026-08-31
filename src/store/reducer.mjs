@@ -38,6 +38,7 @@ const isObject = (value) => {
 };
 const hasExactKeys = (value, expected) => isObject(value)
   && JSON.stringify(Object.keys(value).sort()) === JSON.stringify(expected);
+const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const stringArray = (value) => Array.isArray(value)
   && Array.from(value).every((item) => typeof item === "string" && item.length > 0);
 
@@ -162,7 +163,7 @@ export function createStore(initial) {
     dispatch(action) {
       switch (action.type) {
         case "EDIT_EXPRESSION": {
-          if (!(action.field in state.expressions))
+          if (!hasOwn(state.expressions, action.field))
             throw Object.assign(new Error(`unknown field ${action.field}`), { code: "INVALID_AST" });
           state.expressions[action.field] = action.expr;
           state.revision += 1;

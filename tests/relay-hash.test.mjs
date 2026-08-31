@@ -158,7 +158,7 @@ test("restore rejects malformed pending rules and mismatched display digests", (
 test("relay hashes the complete store snapshot", async () => {
   const source = await readFile(new URL("../harness/relay.mjs", import.meta.url), "utf8");
 
-  assert.match(source, /const snapshot = window\.__imw\.store\.snapshot\(\)/);
+  assert.match(source, /const snapshot = window\.__imw\.snapshot\(\)/);
   assert.match(source, /stateHash: await hash\(snapshot\)/);
   assert.match(source, /authoritativeHash: await hash\(authoritative\)/);
   for (const field of [
@@ -166,5 +166,5 @@ test("relay hashes the complete store snapshot", async () => {
     "authoritativeHashBefore", "authoritativeHashAfter",
     "snapshotBefore", "snapshotAfter",
   ]) assert.match(source, new RegExp(`\\b${field}\\b`), field);
-  assert.doesNotMatch(source, /JSON\.stringify\(window\.__imw\.store\.getState\(\)\)/);
+  assert.doesNotMatch(source, /window\.__imw\.store/);
 });

@@ -46,6 +46,28 @@ async function bootSession(baseUrl) {
     await new Promise((r) => setTimeout(r, 250));
   }
   if (!await evalJs("Boolean(window.__imw)")) throw new Error("page module never initialized");
+  const boundary = await evalJs(`(async () => {
+    const inspected = window.__imw.state();
+    const originalRevision = inspected.revision;
+    inspected.revision = originalRevision + 1000;
+    const tools = await document.modelContext.getTools();
+    const badge = document.querySelector("#tools-badge").textContent;
+    return {
+      frozen: Object.isFrozen(window.__imw),
+      functionsOnly: Object.values(window.__imw).every((value) => typeof value === "function"),
+      forbiddenAbsent: ["store", "dispatch", "restore", "runTool", "render"]
+        .every((key) => !(key in window.__imw)),
+      cloneIsolated: window.__imw.state().revision === originalRevision,
+      inspectedCount: window.__imw.registeredToolCount(),
+      registryCount: tools.length,
+      badge,
+    };
+  })()`, { awaitPromise: true });
+  if (!boundary.frozen || !boundary.functionsOnly || !boundary.forbiddenAbsent || !boundary.cloneIsolated)
+    throw new Error(`inspection boundary failed: ${JSON.stringify(boundary)}`);
+  if (boundary.inspectedCount !== boundary.registryCount
+      || !boundary.badge.includes(`tools: ${boundary.registryCount}/5 registered`))
+    throw new Error(`registration count mismatch: ${JSON.stringify(boundary)}`);
   const { frameTree } = await cdp.send("Page.getFrameTree", {}, sessionId);
   return { chrome, cdp, sessionId, frameId: frameTree.frame.id, evalJs, cdpDomainEnabled };
 }
@@ -72,16 +94,53 @@ const HOSTILE_ID_PIN = {
 async function smokeSession(round, baseUrl) {
   const s = await bootSession(baseUrl);
   try {
-    const present = await s.evalJs('typeof document.modelContext !== "undefined" && document.modelContext !== null');
+    const present = await s.evalJs('typeof document.modelContext?.registerTool === "function"');
     if (!present) throw new Error("document.modelContext absent — flag missing or engine mismatch");
-    const count = await s.evalJs("document.modelContext.getTools().then(t => t.length)", { awaitPromise: true });
-    if (count !== 5) throw new Error(`getTools() length ${count}, want 5`);
+    const registered = await s.evalJs(`document.modelContext.getTools().then((tools) => tools.map((tool) => ({
+      name: tool.name,
+      annotations: tool.annotations,
+      inputSchema: typeof tool.inputSchema === "string" ? JSON.parse(tool.inputSchema) : tool.inputSchema,
+    })))`, { awaitPromise: true });
+    if (registered.length !== 5) throw new Error(`getTools() length ${registered.length}, want 5`);
+    const expectedNames = [
+      "read_mapping_session",
+      "stage_mapping_invariants",
+      "find_mapping_counterexample",
+      "preview_mapping_patch",
+      "prepare_mapping_review",
+    ];
+    assertEq(registered.map((tool) => tool.name).sort(), [...expectedNames].sort(), "registered tool names");
+    const annotations = Object.fromEntries(registered.map((tool) => [tool.name, tool.annotations]));
+    assertEq(annotations, Object.fromEntries([...expectedNames].sort().map((name) => [name, {
+      readOnlyHint: name === "read_mapping_session",
+      untrustedContentHint: true,
+    }])), "registered annotations");
+    const previewSchema = registered.find((tool) => tool.name === "preview_mapping_patch").inputSchema;
+    assertEq(previewSchema.properties.field.enum,
+      ["displayName", "group", "managerId", "department", "email"], "preview field enum");
+    assertEq(previewSchema.properties.expr.maxLength, 512, "preview expression budget");
 
     const read = await invokeTool(s.cdp, s.sessionId, s.frameId, "read_mapping_session", {});
     if (!read.roundTrip) throw new Error(`read round trip failed: ${JSON.stringify(read)}`);
     const payload = JSON.parse(textOf(read.output));
     assertEq(payload.revision, 17, "read revision");
     assertEq(payload.personaCount, 8, "personaCount");
+
+    const beforeOversized = await s.evalJs("JSON.stringify(window.__imw.snapshot())");
+    const oversized = await invokeTool(s.cdp, s.sessionId, s.frameId, "stage_mapping_invariants", {
+      expectedRevision: 17,
+      invariants: [{
+        id: "oversized",
+        type: "forbidden_group",
+        personaCategory: "contractor",
+        group: "g".repeat(10_000),
+      }],
+    });
+    if (!oversized.roundTrip) throw new Error("oversized stage round trip failed");
+    const oversizedPayload = JSON.parse(textOf(oversized.output));
+    assertEq(oversizedPayload.error.code, "INVALID_INPUT", "oversized stage error");
+    assertEq(await s.evalJs("JSON.stringify(window.__imw.snapshot())"), beforeOversized,
+      "oversized stage complete snapshot");
 
     const stagedPins = round === 1 ? [HOSTILE_ID_PIN] : PINS;
     const stage = await invokeTool(s.cdp, s.sessionId, s.frameId, "stage_mapping_invariants",
@@ -94,7 +153,7 @@ async function smokeSession(round, baseUrl) {
       const button = document.querySelector("#confirm-pending");
       if (!button) throw new Error("missing #confirm-pending");
       button.click();
-      return window.__imw.store.getState().revision;
+      return window.__imw.state().revision;
     })()`);
     assertEq(confirmed, 18, "DOM confirm revision");
 
@@ -137,7 +196,7 @@ async function e2e(baseUrl) {
   const s = await bootSession(baseUrl);
   const trace = [];
   const captureState = () => s.evalJs(`(async () => {
-    const snapshot = window.__imw.store.snapshot();
+    const snapshot = window.__imw.snapshot();
     const authoritative = {
       revision: snapshot.state.revision,
       priority: snapshot.state.priority,
@@ -185,8 +244,8 @@ async function e2e(baseUrl) {
       const liveInput = document.querySelector(${JSON.stringify(selector)});
       const error = liveInput.parentElement.querySelector(".expression-error");
       return {
-        revisionAfter: window.__imw.store.getState().revision,
-        expressionAfter: window.__imw.store.getState().expressions[${JSON.stringify(field)}],
+        revisionAfter: window.__imw.state().revision,
+        expressionAfter: window.__imw.state().expressions[${JSON.stringify(field)}],
         inputValue: liveInput.value,
         ariaInvalid: liveInput.getAttribute("aria-invalid"),
         errorHidden: error.hidden,
@@ -205,7 +264,7 @@ async function e2e(baseUrl) {
       if (!select) throw new Error(${JSON.stringify(`missing ${selector}`)});
       select.value = ${JSON.stringify(value)};
       select.dispatchEvent(new Event("change", { bubbles: true }));
-      const state = window.__imw.store.getState();
+      const state = window.__imw.state();
       return {
         revisionAfter: state.revision,
         priorityAfter: state.priority,
@@ -225,7 +284,7 @@ async function e2e(baseUrl) {
       if (!button) throw new Error(${JSON.stringify(`missing ${selector}`)});
       const renderedVersion = Number(button.dataset.version);
       button.click();
-      const state = window.__imw.store.getState();
+      const state = window.__imw.state();
       return {
         renderedVersion,
         revisionAfter: state.revision,
@@ -254,7 +313,7 @@ async function e2e(baseUrl) {
       pwned: typeof window.__pwned,
       text: document.querySelector("#pending-list")?.textContent ?? "",
       imageCount: document.querySelectorAll("#pending-list img").length,
-      pinCount: window.__imw.store.getState().pins.length,
+      pinCount: window.__imw.state().pins.length,
     })`);
     assertEq(hostileUi.pwned, "undefined", "round2 hostile value did not execute");
     assertEq(hostileUi.text.includes(HOSTILE_PIN.group), true, "round2 hostile value visible as text");
@@ -269,7 +328,7 @@ async function e2e(baseUrl) {
     assertEq(r2.p.revision, 17, "round2 stage revision");
     const staleConfirm = await s.evalJs(`(() => {
       window.__oldPendingConfirm.click();
-      const state = window.__imw.store.getState();
+      const state = window.__imw.state();
       return {
         revision: state.revision,
         pendingVersion: state.pending?.version ?? null,
@@ -309,7 +368,7 @@ async function e2e(baseUrl) {
     const manager4 = await humanExpression(4, "managerId", "user.managerId");
     assertEq(manager4.revisionAfter, 19, "round4 revision");
     assertEq(manager4.expressionAfter, "user.managerId", "round4 managerId expression");
-    const e1stale = await s.evalJs(`window.__imw.store.getState().evidence[${JSON.stringify(E1[0])}].stale`);
+    const e1stale = await s.evalJs(`window.__imw.state().evidence[${JSON.stringify(E1[0])}].stale`);
     assertEq(e1stale, true, "round4 E1 stale");
     // 5 prepare over stale E1 MUST fail
     const r5 = await call(5, "prepare_mapping_review", { expectedRevision: 19, evidenceIds: E1 });
@@ -326,7 +385,7 @@ async function e2e(baseUrl) {
       personaIds: ["P2"] });
     assertEq(r7.p.diffs, [{ personaId: "P2", field: "group", before: "employees", after: "contractors" }], "round7 diff");
     assertEq(r7.p.remainingViolations, 0, "round7 remaining");
-    const rev7 = await s.evalJs("window.__imw.store.getState().revision");
+    const rev7 = await s.evalJs("window.__imw.state().revision");
     assertEq(rev7, 19, "round7 preview must not bump revision");
     // 8 human applies group fix (r20) + real priority control (r21); clean sweep → green packet
     const group8 = await humanExpression(8, "group", 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"');
@@ -362,7 +421,7 @@ async function e2e(baseUrl) {
     assertEq(r10.p.revision, 21, "round10 staged revision");
     const confirmed10a = await humanClick(10, "#confirm-pending");
     assertEq(confirmed10a.revisionAfter, 22, "round10 confirmed revision");
-    const e3fresh = await s.evalJs(`window.__imw.store.getState().evidence[${JSON.stringify(E3[0])}].stale`);
+    const e3fresh = await s.evalJs(`window.__imw.state().evidence[${JSON.stringify(E3[0])}].stale`);
     assertEq(e3fresh, false, "round10 clean-sweep evidence survives an ADDED pin (fingerprint untouched)");
     const stale10a = await s.evalJs(`({
       text: document.querySelector("#packet-state").textContent,
@@ -429,7 +488,7 @@ async function e2e(baseUrl) {
 
     // 12 invalid input stays local and preserves the complete store + GREEN UI; valid input commits once
     const before12 = await s.evalJs(`({
-      snapshot: JSON.stringify(window.__imw.store.snapshot()),
+      snapshot: JSON.stringify(window.__imw.snapshot()),
       matrixRows: document.querySelectorAll("#matrix tbody tr").length,
       matrixText: document.querySelector("#matrix tbody").textContent,
       gridFields: [...document.querySelectorAll("#grid input")].map((input) => input.dataset.field),
@@ -450,7 +509,7 @@ async function e2e(baseUrl) {
     assertEq(invalid12.errorHidden, false, "round12 inline error is visible");
     assertEq(invalid12.errorText.includes("position 5"), true, "round12 inline error includes parser position");
     const afterInvalid12 = await s.evalJs(`({
-      snapshot: JSON.stringify(window.__imw.store.snapshot()),
+      snapshot: JSON.stringify(window.__imw.snapshot()),
       matrixRows: document.querySelectorAll("#matrix tbody tr").length,
       matrixText: document.querySelector("#matrix tbody").textContent,
       gridFields: [...document.querySelectorAll("#grid input")].map((input) => input.dataset.field),

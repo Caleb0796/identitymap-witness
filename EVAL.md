@@ -25,14 +25,15 @@ confirmation, and a four-hash per-call write oracle.
 | golden walk | `data/golden-walk.md` hand-derived table == machine recomputation later (T4 wires this cross-check) |
 | parser | SPEC §6 grammar exactly; out-of-grammar → INVALID_AST with position |
 | evaluator | priority resolution, present-but-empty wins (DC4), null poisons concat, `""` vs null equality table, ternary branch capture |
-| provenance | candidates chain lists every consulted source; P4 case names losing `hris` candidate explicitly |
+| provenance | candidates list every consulted source; prototype-chain names are absent unless explicitly owned; P4 names losing `hris` explicitly |
 | invariants | 3 types × pass/violate; checker case-insensitive where SPEC §5 says so (DC1 asymmetry test) |
 | witness | finds all 4 seeded violations; exhaustive minimal set == oracle (size 3, both valid sets accepted); deterministic tie-break; single-invariant → size 1; clean draft → successful citable clean sweep |
 | store | `STAGE_RULES`/`DISCARD_RULES` do not bump revision; version-bound `CONFIRM_RULES` replaces pins and bumps once; stale/double confirms fail; canonical-content pin changes preserve exact invalidation; complete snapshots include both hidden allocators and reject missing counters; recordEvidence/recordPacket do NOT bump |
-| tools | all 5 happy paths; stage returns pending immediately and never moves pins; read exposes pending ids/version; pending-only find/prepare fail `NO_INVARIANTS`; validation and revision/pending precedence fail closed; every reachable error (including `PENDING_EXISTS`) is failure-atomic; ≤1500 budget, redaction, witness cap, and fencing envelopes are asserted |
+| tools | all 5 happy paths; schema/runtime parity for exact string/array/revision limits; non-plain/non-JSON, extra, wrong-type, oversized, and duplicate inputs return `INVALID_INPUT` before handlers; stale-revision precedence remains stable; every reachable error is failure-atomic; ≤1500 budget, manager-id minimization, canary sentinel, witness cap, and fencing are asserted |
 | confirmation/UI | canonical-key-order digest stability plus deliberate FNV-1a collision proves equality is canonical JSON, not digest; hostile rule group/id render through `textContent`; discarded v1 control cannot confirm v2; confirmed hostile id survives find as exact text with no HTML execution |
 | eval oracle | raw snapshot sections, derived-record ids, and hidden counters are own/type/coherence checked; browser SHA-256 values are recomputed; complete per-tool success/error envelopes are required; missing/fake hashes, extra state, modified old evidence, wrong returned ids, unknown tools, and allocator over/under-increments fail closed |
-| redaction | canary sweep over every tool × every persona × keys AND values AND candidates AND diffs; crafted leak in a payload KEY caught; `<redacted:changed>` on identity diffs |
+| redaction | canary sweep over every tool × every persona × keys AND values AND candidates AND diffs; crafted leak in a payload KEY caught; `<redacted:changed>` includes managerId; raw invariant values never enter details |
+| page/server hardening | no HTML-string parsing sink; registration rejection/cancellation lifecycle; frozen clone-only inspection surface; public asset allowlist and curated Render build exclude repository internals |
 
 Gate: exit 0, 0 fail, 0 skip. The real count is whatever `npm test` prints;
 risk coverage matters more than count.
@@ -41,7 +42,9 @@ risk coverage matters more than count.
 
 `node harness/relay.mjs --smoke` (launcher/CDP client built in plan T2, patterns
 retyped from outpocket, nothing imported):
-presence via completed round trip (C7), `(await getTools()).length === 5` (C6),
+presence via completed round trip (C7), visible resolved-registration count equals
+`(await getTools()).length === 5` (C6), every inspection result is clone-isolated,
+and mutable store/tool/render capabilities are absent from the frozen test surface;
 stage pending at r17 → real DOM Confirm all → r18 → one find Completed with the
 DOM matrix updated before response, one -32602
 unknown-name send rejection, **repeated cold sessions ×3 with fresh user-data-dir

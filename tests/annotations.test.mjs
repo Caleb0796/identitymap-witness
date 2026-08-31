@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { TOOLS } from "../src/tools/defs.mjs";
 
 const OUTPUT_FIELDS = ["displayName", "group", "managerId", "department", "email"];
-const EXPECTED_REVISION = { type: "integer", minimum: 0 };
+const EXPECTED_REVISION = { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER };
 
 test("tool annotations exactly describe read-only and untrusted-content behavior", () => {
   const expected = {
@@ -34,10 +34,10 @@ test("stage publishes the strict oneOf invariant schema", () => {
             {
               type: "object",
               properties: {
-                id: { type: "string", minLength: 1 },
+                id: { type: "string", minLength: 1, maxLength: 64 },
                 type: { type: "string", enum: ["forbidden_group"] },
-                personaCategory: { type: "string", minLength: 1 },
-                group: { type: "string", minLength: 1 },
+                personaCategory: { type: "string", minLength: 1, maxLength: 128 },
+                group: { type: "string", minLength: 1, maxLength: 128 },
               },
               required: ["type", "personaCategory", "group"],
               additionalProperties: false,
@@ -45,10 +45,10 @@ test("stage publishes the strict oneOf invariant schema", () => {
             {
               type: "object",
               properties: {
-                id: { type: "string", minLength: 1 },
+                id: { type: "string", minLength: 1, maxLength: 64 },
                 type: { type: "string", enum: ["null_if_missing"] },
                 field: { type: "string", enum: OUTPUT_FIELDS },
-                dependsOn: { type: "string", minLength: 1 },
+                dependsOn: { type: "string", minLength: 1, maxLength: 128 },
               },
               required: ["type", "field", "dependsOn"],
               additionalProperties: false,
@@ -56,7 +56,7 @@ test("stage publishes the strict oneOf invariant schema", () => {
             {
               type: "object",
               properties: {
-                id: { type: "string", minLength: 1 },
+                id: { type: "string", minLength: 1, maxLength: 64 },
                 type: { type: "string", enum: ["source_of_truth"] },
                 field: { type: "string", enum: OUTPUT_FIELDS },
                 source: { type: "string", enum: ["okta", "hris", "ad"] },
@@ -87,4 +87,22 @@ test("all tool argument schemas are closed and fenced revisions are nonnegative 
     minimum: 1,
     maximum: 8,
   });
+
+  assert.deepEqual(find.inputSchema.properties.invariantIds, {
+    type: "array",
+    maxItems: 8,
+    uniqueItems: true,
+    items: { type: "string", minLength: 1, maxLength: 64 },
+  });
+  const preview = TOOLS.find((tool) => tool.name === "preview_mapping_patch");
+  assert.deepEqual(preview.inputSchema.properties.field.enum, OUTPUT_FIELDS);
+  assert.equal(preview.inputSchema.properties.expr.maxLength, 512);
+  assert.equal(preview.inputSchema.properties.personaIds.minItems, 1);
+  assert.equal(preview.inputSchema.properties.personaIds.maxItems, 8);
+  assert.equal(preview.inputSchema.properties.personaIds.uniqueItems, true);
+  const prepare = TOOLS.find((tool) => tool.name === "prepare_mapping_review");
+  assert.equal(prepare.inputSchema.properties.evidenceIds.maxItems, 16);
+  assert.equal(prepare.inputSchema.properties.evidenceIds.uniqueItems, true);
+  assert.equal(prepare.inputSchema.properties.evidenceIds.items.maxLength, 32);
+  assert.equal(prepare.inputSchema.properties.evidenceIds.items.pattern, "^E-[1-9]\\d*$");
 });

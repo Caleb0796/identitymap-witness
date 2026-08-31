@@ -2,14 +2,15 @@
 // canary-bearing strings (keys AND values) and identity-field diffs. Suspenders:
 // assertNoCanary throws PII_GUARD if anything slips through anyway.
 
-const IDENTITY_FIELDS = new Set(["firstName", "lastName", "email", "displayName"]);
+const IDENTITY_FIELDS = new Set(["firstName", "lastName", "email", "displayName", "managerId"]);
 const hit = (s) => typeof s === "string" && s.includes("CANARY_");
+const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 
 export function redactPayload(value) {
   if (typeof value === "string") return hit(value) ? "<redacted>" : value;
   if (Array.isArray(value)) return value.map(redactPayload);
   if (value && typeof value === "object") {
-    const isDiff = "before" in value && "after" in value;
+    const isDiff = hasOwn(value, "before") && hasOwn(value, "after");
     const diffField = isDiff ? (value.field ?? null) : null;
     return Object.fromEntries(Object.entries(value).map(([k, v]) => {
       const key = hit(k) ? "<redacted>" : k;

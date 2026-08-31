@@ -9,12 +9,12 @@ test("personas: identity-bearing keys use canary format; okta always carries ide
   for (const p of ps) for (const src of ["okta", "hris", "ad"]) {
     const prof = p.profiles[src] ?? {};
     for (const [k, re] of [["firstName", /^CANARY_FN_/], ["lastName", /^CANARY_LN_/], ["email", /^CANARY_EM_.+@example\.invalid$/]])
-      if (k in prof) assert.match(prof[k], re, `${p.id}.${src}.${k}`);
-    if (src === "okta") assert.ok("firstName" in prof, `${p.id} okta profile carries identity`);
+      if (Object.hasOwn(prof, k)) assert.match(prof[k], re, `${p.id}.${src}.${k}`);
+    if (src === "okta") assert.ok(Object.hasOwn(prof, "firstName"), `${p.id} okta profile carries identity`);
   }
   assert.ok(ps.some(p => p.id === "P2" && p.profiles.hris.userType === "Contractor")); // DC1 carrier
   assert.ok(ps.some(p => p.id === "P3" && p.region === "EU"
-    && !["okta", "hris", "ad"].some(s => "managerId" in (p.profiles[s] ?? {}))));      // DC2 carrier
+    && !["okta", "hris", "ad"].some(s => Object.hasOwn(p.profiles[s] ?? {}, "managerId")))); // DC2 carrier
   assert.ok(ps.some(p => p.id === "P4" && p.profiles.ad.department === "Sales"
     && p.profiles.hris.department === "Engineering"));                                 // DC3 carrier
   assert.ok(ps.some(p => p.id === "P5" && p.profiles.ad.department === ""

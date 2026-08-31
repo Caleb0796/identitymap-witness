@@ -2,6 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { createStore } from "../src/store/reducer.mjs";
+import {
+  GOLDEN_STATE,
+  createToolExecutor,
+  registerToolDefinitions,
+} from "../src/tools/defs.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 
@@ -41,4 +47,55 @@ test("banned identifier navigator.modelContext appears nowhere in code", async (
     const src = await readFile(join(ROOT, f), "utf8");
     assert.ok(!src.includes("navigator." + "modelContext"), `${f} uses the dead API surface`);
   }
+});
+
+test("app.js has no HTML-string parsing sinks", async () => {
+  const source = await readFile(join(ROOT, "app.js"), "utf8");
+  assert.doesNotMatch(source, /\.(?:innerHTML|outerHTML)\s*=/);
+  assert.doesNotMatch(source, /insertAdjacentHTML\s*\(/);
+});
+
+test("app registration uses method feature detection and a non-BFCache page lifetime signal", async () => {
+  const source = await readFile(join(ROOT, "app.js"), "utf8");
+  assert.match(source, /typeof document\.modelContext\?\.registerTool === "function"/);
+  assert.match(source, /const lifecycle = new AbortController\(\)/);
+  assert.match(source, /if \(!event\.persisted\) lifecycle\.abort\(\)/);
+  assert.match(source, /document\.modelContext\.registerTool\(definition, options\)/);
+});
+
+test("registration awaits success, continues after rejection, and reports only resolved tools", async () => {
+  const signal = new AbortController().signal;
+  const attempted = [];
+  const counts = [];
+  const result = await registerToolDefinitions(
+    [{ name: "first" }, { name: "second" }, { name: "third" }],
+    (definition, options) => {
+      attempted.push([definition.name, options.signal]);
+      if (definition.name === "second") return Promise.reject(new Error("mock rejection"));
+      return definition.name === "first" ? undefined : Promise.resolve();
+    },
+    (tool) => tool,
+    signal,
+    (count) => counts.push(count),
+  );
+  assert.deepEqual(attempted, [["first", signal], ["second", signal], ["third", signal]]);
+  assert.deepEqual(counts, [1, 2]);
+  assert.deepEqual(result, { registeredCount: 2, failed: true });
+});
+
+test("an already-aborted execute callback cannot enter runTool or move allocators", async () => {
+  const store = createStore(GOLDEN_STATE);
+  const before = JSON.stringify(store.snapshot());
+  let resultCallbacks = 0;
+  const execute = createToolExecutor(store, [], "read_mapping_session", () => {
+    resultCallbacks += 1;
+  });
+  const controller = new AbortController();
+  controller.abort();
+  const result = await execute({}, { signal: controller.signal });
+  assert.deepEqual(result, {
+    content: [{ type: "text", text: '{"error":{"code":"ABORTED"}}' }],
+  });
+  assert.equal(resultCallbacks, 0);
+  assert.equal(JSON.stringify(store.snapshot()), before);
 });

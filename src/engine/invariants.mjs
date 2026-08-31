@@ -20,23 +20,25 @@ export function checkInvariants(pins, personas, outputs) {
         if (lc(persona.category) !== lc(pin.personaCategory)) continue;
         if (got && lc(got.value) === lc(pin.group)) {
           violations.push({ invariantId: pin.id, personaId: persona.id, field: "group",
-            detail: `category ${persona.category} mapped into forbidden group ${got.value}` });
+            detail: "persona category maps into a forbidden group" });
         }
       } else if (pin.type === "null_if_missing") {
         const got = requireField(fields, pin.field);
-        const supplied = ["okta", "hris", "ad"].some((s) => pin.dependsOn in (persona.profiles?.[s] ?? {}));
+        const supplied = ["okta", "hris", "ad"]
+          .some((source) => hasOwn(persona.profiles?.[source] ?? {}, pin.dependsOn));
         if (supplied) continue;
         if (got && got.value !== null) {
           violations.push({ invariantId: pin.id, personaId: persona.id, field: pin.field,
-            detail: `no source supplies ${pin.dependsOn}; target must be null, got ${JSON.stringify(got.value)}` });
+            detail: `no source supplies ${pin.dependsOn}; target is non-null` });
         }
       } else if (pin.type === "source_of_truth") {
         const got = requireField(fields, pin.field);
-        const sotValue = (persona.profiles?.[pin.source] ?? {})[pin.field];
+        const sourceProfile = persona.profiles?.[pin.source] ?? {};
+        const sotValue = hasOwn(sourceProfile, pin.field) ? sourceProfile[pin.field] : null;
         if (sotValue == null || sotValue === "") continue;
         if (got && got.prov.source !== pin.source) {
           violations.push({ invariantId: pin.id, personaId: persona.id, field: pin.field,
-            detail: `${pin.source} holds ${JSON.stringify(sotValue)} but value came from ${got.prov.source ?? "nowhere"}` });
+            detail: `${pin.source} is the expected source; ${got.prov.source ?? "no source"} won` });
         }
       } else {
         throw Object.assign(new Error(`unknown invariant type ${pin.type}`), { code: "BAD_RULE" });

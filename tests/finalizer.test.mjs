@@ -56,11 +56,29 @@ test("every tool's reachable error envelopes cross the unified finalizer", async
       }),
     },
     {
-      label: "stage: output-budget EVALUATOR_FAILED",
+      label: "stage: output-budget EVALUATOR_FAILED from bounded input",
       code: "EVALUATOR_FAILED",
+      run: () => {
+        const base = createStore(GOLDEN_STATE);
+        const store = {
+          ...base,
+          dispatch(...args) {
+            base.dispatch(...args);
+            base.getState().pending.rules[0].id = LONG_ID;
+          },
+        };
+        return runTool(store, personas, "stage_mapping_invariants", {
+          expectedRevision: 17,
+          invariants: [PINS[0]],
+        });
+      },
+    },
+    {
+      label: "stage: INVALID_INPUT",
+      code: "INVALID_INPUT",
       run: () => runTool(createStore(GOLDEN_STATE), personas, "stage_mapping_invariants", {
         expectedRevision: 17,
-        invariants: [LONG_PIN],
+        invariants: [{ ...PINS[0], group: "g".repeat(10_000) }],
       }),
     },
     {
@@ -105,15 +123,16 @@ test("every tool's reachable error envelopes cross the unified finalizer", async
       }),
     },
     {
-      label: "preview: output-budget EVALUATOR_FAILED",
+      label: "preview: pre-seeded long value output-budget EVALUATOR_FAILED",
       code: "EVALUATOR_FAILED",
       run: () => {
-        const field = `field-${LONG_ID}`;
-        return runTool(createStore({
-          ...GOLDEN_STATE,
-          expressions: { ...GOLDEN_STATE.expressions, [field]: '"before"' },
-        }), personas, "preview_mapping_patch", {
-          expectedRevision: 17, field, expr: '"after"', personaIds: ["P1"],
+        const longPersonas = [{ id: "P1", category: "employee", profiles: {
+          okta: { group: LONG_ID }, hris: {}, ad: {},
+        } }];
+        const store = createStore({ ...GOLDEN_STATE,
+          expressions: { ...GOLDEN_STATE.expressions, group: "user.group" } });
+        return runTool(store, longPersonas, "preview_mapping_patch", {
+          expectedRevision: 17, field: "group", expr: '"after"', personaIds: ["P1"],
         });
       },
     },
@@ -181,14 +200,21 @@ test("every tool's reachable error envelopes cross the unified finalizer", async
 
 test("a finalized failed stage restores the pending version allocator", async () => {
   const personas = await load("personas.json");
-  const store = createStore(GOLDEN_STATE);
+  const base = createStore(GOLDEN_STATE);
+  const store = {
+    ...base,
+    dispatch(...args) {
+      base.dispatch(...args);
+      base.getState().pending.rules[0].id = LONG_ID;
+    },
+  };
   const failed = runTool(store, personas, "stage_mapping_invariants", {
     expectedRevision: 17,
-    invariants: [LONG_PIN],
+    invariants: [PINS[0]],
   });
   assertFinalEnvelope(failed, "EVALUATOR_FAILED");
 
-  const succeeded = runTool(store, personas, "stage_mapping_invariants", {
+  const succeeded = runTool(base, personas, "stage_mapping_invariants", {
     expectedRevision: 17,
     invariants: PINS,
   });
@@ -214,18 +240,14 @@ test("caller-controlled error details are redacted or replaced as a whole", asyn
     assert.equal(result.error.reason, "<redacted>");
   });
 
-  await t.test("oversized persona id keeps its code and withholds the entire detail", () => {
+  await t.test("oversized persona id is rejected at the transport boundary", () => {
     const result = runTool(createStore(GOLDEN_STATE), personas, "preview_mapping_patch", {
       expectedRevision: 17, field: "group", expr: '"x"', personaIds: [LONG_ID],
     });
-    assertFinalEnvelope(result, "UNKNOWN_PERSONA");
-    assert.deepEqual(result.error, {
-      code: "UNKNOWN_PERSONA",
-      reason: "detail withheld by output budget",
-    });
+    assertFinalEnvelope(result, "INVALID_INPUT");
   });
 
-  await t.test("oversized staleIds keeps STALE_EVIDENCE and withholds the entire detail", () => {
+  await t.test("oversized evidence arrays are rejected at the transport boundary", () => {
     const store = createStore({ ...GOLDEN_STATE, pins: [PINS[0]] });
     const evidenceIds = Array.from({ length: 400 }, () => store.recordEvidence("counterexample", {
       fields: ["group"], invariants: [PINS[0].id], personas: ["P2"],
@@ -234,22 +256,14 @@ test("caller-controlled error details are redacted or replaced as a whole", asyn
     const result = runTool(store, personas, "prepare_mapping_review", {
       expectedRevision: 18, evidenceIds,
     });
-    assertFinalEnvelope(result, "STALE_EVIDENCE");
-    assert.deepEqual(result.error, {
-      code: "STALE_EVIDENCE",
-      reason: "detail withheld by output budget",
-    });
+    assertFinalEnvelope(result, "INVALID_INPUT");
   });
 
-  await t.test("a final canary trip keeps the original error code", () => {
+  await t.test("non-JSON persona objects cannot invoke custom serialization", () => {
     const personaId = { toJSON: () => "CANARY_FINAL_ASSERT" };
     const result = runTool(createStore(GOLDEN_STATE), personas, "preview_mapping_patch", {
       expectedRevision: 17, field: "group", expr: '"x"', personaIds: [personaId],
     });
-    assertFinalEnvelope(result, "UNKNOWN_PERSONA");
-    assert.deepEqual(result.error, {
-      code: "UNKNOWN_PERSONA",
-      reason: "detail withheld by privacy guard",
-    });
+    assertFinalEnvelope(result, "INVALID_INPUT");
   });
 });

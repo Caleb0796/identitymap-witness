@@ -27,9 +27,11 @@ test("dynamic __proto__ keys survive redaction as own JSON properties", () => {
 });
 
 test("identity field names force diff redaction regardless of value", () => {
-  const p = redactPayload({ diffs: [{ personaId: "P2", field: "email", before: "a@b.c", after: "d@e.f" }] });
-  assert.equal(p.diffs[0].before, "<redacted:changed>");
-  assert.equal(p.diffs[0].after, "<redacted:changed>");
+  for (const field of ["email", "managerId"]) {
+    const p = redactPayload({ diffs: [{ personaId: "P2", field, before: "a", after: "b" }] });
+    assert.equal(p.diffs[0].before, "<redacted:changed>");
+    assert.equal(p.diffs[0].after, "<redacted:changed>");
+  }
 });
 
 test("assertNoCanary throws PII_GUARD on a crafted leak", () => {

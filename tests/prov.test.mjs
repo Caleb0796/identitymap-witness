@@ -22,3 +22,24 @@ test("candidates records absence too", () => {
   assert.deepEqual(r.prov.candidates.map((c) => [c.source, c.present]),
     [["ad", false], ["hris", false], ["okta", true]]);
 });
+
+test("prototype-chain names are absent from ordinary empty profiles", () => {
+  const persona = { id: "PX", category: "employee", profiles: { okta: {}, hris: {}, ad: {} } };
+  for (const name of ["toString", "constructor", "__proto__"]) {
+    const result = evaluate(parse(`user.${name}`), persona, { priority: ["ad", "hris"] });
+    assert.equal(result.value, null, name);
+    assert.equal(result.prov.source, null, name);
+    assert.ok(result.prov.candidates.every((candidate) => candidate.present === false), name);
+  }
+});
+
+test("an explicitly owned prototype-named profile attribute resolves normally", () => {
+  const persona = {
+    id: "PX",
+    category: "employee",
+    profiles: { okta: {}, hris: { toString: "owned" }, ad: {} },
+  };
+  const result = evaluate(parse("user.toString"), persona, { priority: ["ad", "hris"] });
+  assert.equal(result.value, "owned");
+  assert.equal(result.prov.source, "hris");
+});

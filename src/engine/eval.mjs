@@ -2,13 +2,15 @@
 // {source, branch, candidates, inputs}. Resolution consults EVERY source in
 // priority order (+ okta tail) so losing candidates stay visible to the rail.
 
+const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+
 function resolve(name, persona, priority) {
   const order = [...priority, "okta"];
   const candidates = [];
   let winner = null;
   for (const source of order) {
     const prof = persona.profiles?.[source] ?? {};
-    const present = name in prof;
+    const present = hasOwn(prof, name);
     candidates.push({ source, present, value: present ? prof[name] : undefined });
     if (present && winner === null) winner = { source, value: prof[name] };
   }

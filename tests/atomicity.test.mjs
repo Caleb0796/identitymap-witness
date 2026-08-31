@@ -61,13 +61,20 @@ test("every reachable failed tool result leaves the store byte-identical", async
     }, "BAD_RULE");
   });
 
-  await t.test("stage: output-budget EVALUATOR_FAILED rolls back its dispatch", () => {
-    const store = createStore(GOLDEN_STATE);
+  await t.test("stage: output-budget EVALUATOR_FAILED rolls back a bounded dispatch", () => {
+    const base = createStore(GOLDEN_STATE);
+    const store = {
+      ...base,
+      dispatch(...args) {
+        base.dispatch(...args);
+        base.getState().pending.rules[0].id = LONG_ID;
+      },
+    };
     assertFailedAtomically(store, personas, "stage_mapping_invariants", {
       expectedRevision: 17,
-      invariants: [LONG_PIN],
+      invariants: [PINS[0]],
     }, "EVALUATOR_FAILED");
-    const next = runTool(store, personas, "stage_mapping_invariants", {
+    const next = runTool(base, personas, "stage_mapping_invariants", {
       expectedRevision: 17,
       invariants: PINS,
     });
@@ -137,18 +144,26 @@ test("every reachable failed tool result leaves the store byte-identical", async
     }, "UNKNOWN_PERSONA");
   });
 
-  await t.test("preview: output-budget EVALUATOR_FAILED rolls back recorded evidence", () => {
-    const field = `field-${"x".repeat(2_000)}`;
-    const store = createStore({
-      ...GOLDEN_STATE,
-      expressions: { ...GOLDEN_STATE.expressions, [field]: '"before"' },
-    });
-    assertFailedAtomically(store, personas, "preview_mapping_patch", {
+  await t.test("preview: pre-seeded long values still exercise output budgeting and rollback", () => {
+    const longPersonas = [{ id: "P1", category: "employee", profiles: {
+      okta: { group: LONG_ID }, hris: {}, ad: {},
+    } }];
+    const store = createStore({ ...GOLDEN_STATE,
+      expressions: { ...GOLDEN_STATE.expressions, group: "user.group" } });
+    assertFailedAtomically(store, longPersonas, "preview_mapping_patch", {
       expectedRevision: 17,
-      field,
+      field: "group",
       expr: '"after"',
       personaIds: ["P1"],
     }, "EVALUATOR_FAILED");
+  });
+
+  await t.test("stage: INVALID_INPUT", () => {
+    const store = createStore(GOLDEN_STATE);
+    assertFailedAtomically(store, personas, "stage_mapping_invariants", {
+      expectedRevision: 17,
+      invariants: [{ ...PINS[0], group: "g".repeat(10_000) }],
+    }, "INVALID_INPUT");
   });
 
   await t.test("prepare: STALE_EVIDENCE", () => {

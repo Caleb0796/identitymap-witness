@@ -4,7 +4,23 @@ import { parse } from "../engine/parser.mjs";
 import { evaluate } from "../engine/eval.mjs";
 import { findWitness } from "../engine/witness.mjs";
 import { redactPayload, assertNoCanary } from "./redact.mjs";
-import { OUTPUT_FIELDS, validateInvariants, validateMaxPersonas } from "./validate.mjs";
+import {
+  MAX_EVIDENCE_ID_CHARS,
+  MAX_EVIDENCE_IDS,
+  MAX_EXPRESSION_CHARS,
+  MAX_INVARIANT_ID_CHARS,
+  MAX_INVARIANT_IDS,
+  MAX_INVARIANTS,
+  MAX_PERSONA_ID_CHARS,
+  MAX_PERSONA_IDS,
+  MAX_REVISION,
+  MAX_RULE_TEXT_CHARS,
+  OUTPUT_FIELDS,
+  validateInvariants,
+  validateMaxPersonas,
+  validateToolInput,
+  validateToolInputHeader,
+} from "./validate.mjs";
 
 export const GOLDEN_STATE = {
   revision: 17,
@@ -121,7 +137,7 @@ const HANDLERS = {
   preview_mapping_patch(store, personas, args) {
     const s = store.getState();
     if (args.expectedRevision !== s.revision) return mismatch(s);
-    if (!(args.field in s.expressions))
+    if (!hasOwn(s.expressions, args.field))
       return failure("INVALID_AST", { reason: `unknown target field ${args.field}`, position: 0 });
     let patchedAst;
     try { patchedAst = parse(args.expr); }
@@ -184,28 +200,28 @@ const HANDLERS = {
 
 export const TOOLS = [
   { name: "read_mapping_session",
-    description: "Report the current UNSAVED mapping session: revision, source priority order, per-field draft expressions, confirmed and pending invariant ids, pending version, persona pool size. Read-only; values are redacted of personal data.",
+    description: "Report the current UNSAVED mapping session: revision, source priority order, per-field draft expressions, confirmed and pending invariant ids, pending version, persona pool size. Read-only; returns no profile values.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, untrustedContentHint: true } },
   { name: "stage_mapping_invariants",
     description: "Stage a full proposed set of business invariants for visible human review (never persisted). Requires expectedRevision; returns immediately without changing confirmed pins or revision.",
     inputSchema: { type: "object", properties: {
-      expectedRevision: { type: "integer", minimum: 0 },
-      invariants: { type: "array", minItems: 1, maxItems: 8, items: { oneOf: [
+      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION },
+      invariants: { type: "array", minItems: 1, maxItems: MAX_INVARIANTS, items: { oneOf: [
         { type: "object", properties: {
-          id: { type: "string", minLength: 1 },
+          id: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS },
           type: { type: "string", enum: ["forbidden_group"] },
-          personaCategory: { type: "string", minLength: 1 },
-          group: { type: "string", minLength: 1 },
+          personaCategory: { type: "string", minLength: 1, maxLength: MAX_RULE_TEXT_CHARS },
+          group: { type: "string", minLength: 1, maxLength: MAX_RULE_TEXT_CHARS },
         }, required: ["type", "personaCategory", "group"], additionalProperties: false },
         { type: "object", properties: {
-          id: { type: "string", minLength: 1 },
+          id: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS },
           type: { type: "string", enum: ["null_if_missing"] },
           field: { type: "string", enum: OUTPUT_FIELDS },
-          dependsOn: { type: "string", minLength: 1 },
+          dependsOn: { type: "string", minLength: 1, maxLength: MAX_RULE_TEXT_CHARS },
         }, required: ["type", "field", "dependsOn"], additionalProperties: false },
         { type: "object", properties: {
-          id: { type: "string", minLength: 1 },
+          id: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS },
           type: { type: "string", enum: ["source_of_truth"] },
           field: { type: "string", enum: OUTPUT_FIELDS },
           source: { type: "string", enum: ["okta", "hris", "ad"] },
@@ -214,25 +230,31 @@ export const TOOLS = [
       required: ["expectedRevision", "invariants"], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true } },
   { name: "find_mapping_counterexample",
-    description: "Evaluate every synthetic persona against the UNSAVED draft and return the minimal persona set witnessing every violated pinned invariant, with redacted field-level provenance and evidence ids.",
+    description: "Evaluate every synthetic persona against the UNSAVED draft and return the minimal persona set witnessing every violated pinned invariant, with value-minimized field/source details and evidence ids.",
     inputSchema: { type: "object", properties: {
-      expectedRevision: { type: "integer", minimum: 0 },
-      invariantIds: { type: "array", items: { type: "string" } },
+      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION },
+      invariantIds: { type: "array", maxItems: MAX_INVARIANT_IDS, uniqueItems: true,
+        items: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS } },
       maxPersonas: { type: "integer", minimum: 1, maximum: 8 } },
       required: ["expectedRevision"], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true } },
   { name: "preview_mapping_patch",
-    description: "Preview a candidate expression fix against named personas WITHOUT editing the draft: redacted before/after diffs and remaining violations. The human applies edits in the UI themselves.",
+    description: "Preview a candidate expression fix against named personas WITHOUT editing the draft: identity-minimized before/after diffs and remaining violations. Applying edits remains a manual page control.",
     inputSchema: { type: "object", properties: {
-      expectedRevision: { type: "integer", minimum: 0 }, field: { type: "string" },
-      expr: { type: "string" }, personaIds: { type: "array", items: { type: "string" } } },
+      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION },
+      field: { type: "string", enum: OUTPUT_FIELDS },
+      expr: { type: "string", maxLength: MAX_EXPRESSION_CHARS },
+      personaIds: { type: "array", minItems: 1, maxItems: MAX_PERSONA_IDS, uniqueItems: true,
+        items: { type: "string", minLength: 1, maxLength: MAX_PERSONA_ID_CHARS } } },
       required: ["expectedRevision", "field", "expr", "personaIds"], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true } },
   { name: "prepare_mapping_review",
     description: "Assemble a review packet from fresh evidence ids. Fails on stale evidence (the human edited since) and on any privacy-guard trip. Enables the human's plain Review button; never sends or applies anything.",
     inputSchema: { type: "object", properties: {
-      expectedRevision: { type: "integer", minimum: 0 },
-      evidenceIds: { type: "array", items: { type: "string" } } },
+      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION },
+      evidenceIds: { type: "array", maxItems: MAX_EVIDENCE_IDS, uniqueItems: true,
+        items: { type: "string", minLength: 1, maxLength: MAX_EVIDENCE_ID_CHARS,
+          pattern: "^E-[1-9]\\d*$" } } },
       required: ["expectedRevision", "evidenceIds"], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true } },
 ];
@@ -286,10 +308,44 @@ export function runTool(store, personas, name, args) {
   if (!h) {
     r = failure("UNKNOWN_TOOL", { name });
   } else {
-    try { r = h(store, personas, args ?? {}); }
+    try {
+      validateToolInputHeader(name, args);
+      if (name !== "read_mapping_session" && args.expectedRevision !== store.getState().revision)
+        r = mismatch(store.getState());
+      else {
+        validateToolInput(name, args);
+        r = h(store, personas, args);
+      }
+    }
     catch (e) { r = failure(e.code ?? "EVALUATOR_FAILED", { reason: String(e.message ?? e) }); }
   }
   const result = finalize(r);
   if (!result.ok) store.restore(snap);
   return result;
+}
+
+export function createToolExecutor(store, personas, name, onResult) {
+  return async (args, { signal } = {}) => {
+    if (signal?.aborted) {
+      return { content: [{ type: "text", text: '{"error":{"code":"ABORTED"}}' }] };
+    }
+    const result = runTool(store, personas, name, args);
+    onResult(result);
+    return { content: [{ type: "text", text: wireText(result) }] };
+  };
+}
+
+export async function registerToolDefinitions(tools, register, makeDefinition, signal, onRegistered) {
+  let registeredCount = 0;
+  let failed = false;
+  for (const tool of tools) {
+    try {
+      await Promise.resolve(register(makeDefinition(tool), { signal }));
+      registeredCount += 1;
+      onRegistered(registeredCount);
+    } catch {
+      failed = true;
+    }
+  }
+  return { registeredCount, failed };
 }
