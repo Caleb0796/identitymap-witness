@@ -451,6 +451,7 @@ async function e2e(baseUrl) {
     const result = await s.evalJs(`(() => {
       const input = document.querySelector(${JSON.stringify(selector)});
       if (!input) throw new Error(${JSON.stringify(`missing ${selector}`)});
+      input.focus();
       input.value = ${JSON.stringify(expr)};
       input.dispatchEvent(new Event("change", { bubbles: true }));
       const liveInput = document.querySelector(${JSON.stringify(selector)});
@@ -462,6 +463,7 @@ async function e2e(baseUrl) {
         ariaInvalid: liveInput.getAttribute("aria-invalid"),
         errorHidden: error.hidden,
         errorText: error.textContent,
+        active: document.activeElement === liveInput,
       };
     })()`);
     trace.push({ round, kind: "human-dom", via: "dom-change", selector,
@@ -474,6 +476,7 @@ async function e2e(baseUrl) {
     const result = await s.evalJs(`(() => {
       const select = document.querySelector(${JSON.stringify(selector)});
       if (!select) throw new Error(${JSON.stringify(`missing ${selector}`)});
+      select.focus();
       select.value = ${JSON.stringify(value)};
       select.dispatchEvent(new Event("change", { bubbles: true }));
       const state = window.__imw.state();
@@ -484,6 +487,7 @@ async function e2e(baseUrl) {
         optionLabels: [...document.querySelector(${JSON.stringify(selector)}).options].map((option) => option.textContent),
         evidenceAllStale: Object.values(state.evidence).every((evidence) => evidence.stale),
         staleBannerVisible: !document.querySelector("#stale-banner").hidden,
+        active: document.activeElement === document.querySelector(${JSON.stringify(selector)}),
       };
     })()`);
     trace.push({ round, kind: "human-dom", via: "dom-change", selector,
@@ -495,6 +499,7 @@ async function e2e(baseUrl) {
       const button = document.querySelector(${JSON.stringify(selector)});
       if (!button) throw new Error(${JSON.stringify(`missing ${selector}`)});
       const renderedVersion = Number(button.dataset.version);
+      button.focus();
       button.click();
       const state = window.__imw.state();
       return {
@@ -502,6 +507,7 @@ async function e2e(baseUrl) {
         revisionAfter: state.revision,
         pendingVersionAfter: state.pending?.version ?? null,
         pinIdsAfter: state.pins.map((pin) => pin.id),
+        activeId: document.activeElement.id,
       };
     })()`);
     trace.push({ round, kind: "human-dom", via: "click", selector, ...result });
@@ -536,6 +542,7 @@ async function e2e(baseUrl) {
     const discarded = await humanClick(2, "#discard-pending");
     assertEq(discarded.revisionAfter, 17, "round2 discard revision");
     assertEq(discarded.pendingVersionAfter, null, "round2 discard clears pending");
+    assertEq(discarded.activeId, "copy-prompt-1", "round2 discard focuses the setup prompt");
 
     const r2 = await call(2, "stage_mapping_invariants", { expectedRevision: 17, invariants: PINS });
     assertEq(r2.p.revision, 17, "round2 stage revision");
@@ -570,6 +577,7 @@ async function e2e(baseUrl) {
     const confirmed2 = await humanClick(2, "#confirm-pending");
     assertEq(confirmed2.revisionAfter, 18, "round2 confirm revision");
     assertEq(confirmed2.pinIdsAfter, PINS.map((pin) => pin.id), "round2 confirmed pins");
+    assertEq(confirmed2.activeId, "copy-prompt-2", "round2 confirm focuses the next-step prompt");
     const unpinLabels = await s.evalJs(`([...document.querySelectorAll("#pins [data-unpin]")]
       .map((button) => button.getAttribute("aria-label")))`);
     assertEq(unpinLabels, PINS.map((pin) => `Unpin invariant ${pin.id}`), "round2 unpin controls are labelled");
@@ -662,6 +670,7 @@ async function e2e(baseUrl) {
     const manager4 = await humanExpression(4, "managerId", "user.managerId");
     assertEq(manager4.revisionAfter, 19, "round4 revision");
     assertEq(manager4.expressionAfter, "user.managerId", "round4 managerId expression");
+    assertEq(manager4.active, true, "round4 managerId edit preserves input focus");
     const e1stale = await s.evalJs(`window.__imw.state().evidence[${JSON.stringify(E1[0])}].stale`);
     assertEq(e1stale, true, "round4 E1 stale");
     // 5 prepare over stale E1 MUST fail
@@ -685,6 +694,7 @@ async function e2e(baseUrl) {
     const group8 = await humanExpression(8, "group", 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"');
     assertEq(group8.revisionAfter, 20, "round8 group revision");
     assertEq(group8.expressionAfter, 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"', "round8 group expression");
+    assertEq(group8.active, true, "round8 group edit preserves input focus");
     const priority8 = await humanPriority(8, ["hris", "ad"]);
     assertEq(priority8.revisionAfter, 21, "round8 revision");
     assertEq(priority8.priorityAfter, ["hris", "ad"], "round8 priority committed through select");
@@ -692,6 +702,7 @@ async function e2e(baseUrl) {
     assertEq(priority8.optionLabels, ["ad → hris → okta", "hris → ad → okta"], "round8 select has exactly two choices");
     assertEq(priority8.evidenceAllStale, true, "round8 priority change stales every prior evidence record");
     assertEq(priority8.staleBannerVisible, true, "round8 priority change exposes stale banner");
+    assertEq(priority8.active, true, "round8 priority change preserves select focus");
     const r8 = await call(8, "find_mapping_counterexample", { expectedRevision: 21 });
     assertEq(r8.p.cleanSweep, true, "round8 clean sweep");
     assertEq(r8.p.fullSweep, true, "round8 full sweep");
@@ -802,6 +813,7 @@ async function e2e(baseUrl) {
     assertEq(invalid12.ariaInvalid, "true", "round12 invalid input is marked invalid");
     assertEq(invalid12.errorHidden, false, "round12 inline error is visible");
     assertEq(invalid12.errorText.includes("position 5"), true, "round12 inline error includes parser position");
+    assertEq(invalid12.active, true, "round12 invalid input keeps focus");
     const afterInvalid12 = await s.evalJs(`({
       snapshot: JSON.stringify(window.__imw.snapshot()),
       matrixRows: document.querySelectorAll("#matrix tbody tr").length,
@@ -823,12 +835,44 @@ async function e2e(baseUrl) {
     assertEq(afterInvalid12.packetGreen, true, "round12 invalid input preserves GREEN packet");
     assertEq(afterInvalid12.applyDisabled, false, "round12 invalid input leaves apply enabled");
 
+    const readWhileInvalid12 = await call(12, "read_mapping_session", {});
+    assertEq(readWhileInvalid12.p.revision, 25, "round12 read during invalid local draft sees committed revision");
+    const afterRead12 = await s.evalJs(`(() => {
+      const input = document.querySelector('#expression-managerId');
+      const error = document.querySelector('#expression-error-managerId');
+      return {
+        snapshot: JSON.stringify(window.__imw.snapshot()),
+        inputValue: input.value,
+        ariaInvalid: input.getAttribute('aria-invalid'),
+        errorText: error.textContent,
+        active: document.activeElement === input,
+      };
+    })()`);
+    assertEq(afterRead12.snapshot, before12.snapshot, "round12 read during invalid local draft leaves state byte-identical");
+    assertEq(afterRead12.inputValue, "user.", "round12 tool render preserves invalid local value");
+    assertEq(afterRead12.ariaInvalid, "true", "round12 tool render preserves invalid state");
+    assertEq(afterRead12.errorText, invalid12.errorText, "round12 tool render preserves inline error");
+    assertEq(afterRead12.active, true, "round12 tool render preserves input focus");
+
+    const overlongExpression = `"${"a".repeat(512)}"`;
+    const overlong12 = await humanExpression(12, "managerId", overlongExpression);
+    assertEq(overlong12.revisionAfter, 25, "round12 overlong expression does not bump revision");
+    assertEq(overlong12.expressionAfter, "user.managerId", "round12 overlong expression does not commit");
+    assertEq(overlong12.inputValue, overlongExpression, "round12 overlong input remains visible");
+    assertEq(overlong12.ariaInvalid, "true", "round12 overlong input is marked invalid");
+    assertEq(overlong12.errorHidden, false, "round12 overlong error is visible");
+    assertEq(overlong12.errorText.includes("maximum is 512"), true, "round12 overlong error names the limit");
+    assertEq(overlong12.active, true, "round12 overlong input keeps focus");
+    assertEq(await s.evalJs("JSON.stringify(window.__imw.snapshot())"), before12.snapshot,
+      "round12 overlong input leaves complete snapshot byte-identical");
+
     const valid12 = await humanExpression(12, "managerId", "user.managerId");
     assertEq(valid12.revisionAfter, invalid12.revisionAfter + 1, "round12 valid expression bumps exactly once");
     assertEq(valid12.revisionAfter, 26, "round12 valid expression revision");
     assertEq(valid12.expressionAfter, "user.managerId", "round12 valid expression commits");
     assertEq(valid12.ariaInvalid, "false", "round12 valid expression clears invalid state");
     assertEq(valid12.errorHidden, true, "round12 valid expression clears inline error");
+    assertEq(valid12.active, true, "round12 valid expression preserves input focus");
 
     const sha = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
     const configuredTrace = process.env.IMW_E2E_TRACE_PATH;
@@ -846,7 +890,7 @@ async function e2e(baseUrl) {
       await writeFile(tmp, body, { flag: "wx" });
       await rename(tmp, new URL(`../${out}`, import.meta.url));
     }
-    ok(`e2e: 12 rounds green — stale rejection (r5), mismatch recovery (r9), pin-coverage flip (r10), packet freshness recovery (r11), inline validation (r12); trace → ${out}`);
+    ok(`e2e: 12 rounds green — stale rejection (r5), mismatch recovery (r9), pin-coverage flip (r10), packet freshness recovery (r11), input bounds/draft/focus recovery (r12); trace → ${out}`);
   } finally {
     s.cdp.close();
     await s.chrome.close();

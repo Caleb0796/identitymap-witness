@@ -9,6 +9,7 @@ import { createStore, packetFresh } from "./src/store/reducer.mjs";
 import { validatePersonasFixture } from "./src/engine/personas.mjs";
 import { evaluateAll } from "./src/engine/witness.mjs";
 import { parse } from "./src/engine/parser.mjs";
+import { MAX_EXPRESSION_CHARS } from "./src/tools/validate.mjs";
 
 const $ = (sel) => document.querySelector(sel);
 const present = typeof document.modelContext?.registerTool === "function";
@@ -123,15 +124,20 @@ function renderPending(s) {
     button.textContent = label;
     button.setAttribute("aria-label", label);
     button.addEventListener("click", () => {
+      let completed = false;
       try {
         store.dispatch({ type, version: Number(button.dataset.version) });
         ui.pendingError = null;
+        completed = true;
       } catch (caught) {
         ui.pendingError = caught?.code === "STALE_CONFIRM"
           ? "STALE_CONFIRM — pending rules changed; review the current proposal"
           : String(caught?.message ?? caught);
       }
       render();
+      if (completed)
+        $(type === "CONFIRM_RULES" ? "#copy-prompt-2" : "#copy-prompt-1")
+          .focus({ preventScroll: true });
     });
     actions.append(button);
   }
@@ -221,9 +227,26 @@ function renderRail(outs) {
 
 function render() {
   const active = document.activeElement;
+  const activeId = active?.id ?? null;
+  const inputFocus = active?.matches?.("#grid input")
+    ? {
+        selectionStart: active.selectionStart,
+        selectionEnd: active.selectionEnd,
+        selectionDirection: active.selectionDirection,
+      }
+    : null;
   const matrixFocus = active?.classList.contains("matrix-select")
     ? { personaId: active.dataset.personaId, field: active.dataset.field }
     : null;
+  const localDrafts = new Map([...document.querySelectorAll("#grid input")].map((input) => {
+    const error = input.parentElement.querySelector(".expression-error");
+    return [input.dataset.field, {
+      value: input.value,
+      ariaInvalid: input.getAttribute("aria-invalid"),
+      errorHidden: error.hidden,
+      errorText: error.textContent,
+    }];
+  }));
   const s = store.getState();
   $("#rev-badge").textContent = `r${s.revision}`;
   $("#priority-select").value = s.priority.join(",");
@@ -270,6 +293,14 @@ function render() {
     error.className = "expression-error";
     error.setAttribute("aria-live", "polite");
     error.hidden = true;
+    const localDraft = localDrafts.get(field);
+    if (localDraft
+        && (localDraft.value !== expression || localDraft.ariaInvalid === "true")) {
+      input.value = localDraft.value;
+      input.setAttribute("aria-invalid", localDraft.ariaInvalid);
+      error.hidden = localDraft.errorHidden;
+      error.textContent = localDraft.errorText;
+    }
     expressionCell.append(label, input, error);
     const provenanceCell = document.createElement("td");
     provenanceCell.className = "prov-chip";
@@ -280,6 +311,12 @@ function render() {
   for (const input of document.querySelectorAll("#grid input")) {
     input.addEventListener("change", (ev) => {
       const error = ev.target.parentElement.querySelector(".expression-error");
+      if (ev.target.value.length > MAX_EXPRESSION_CHARS) {
+        ev.target.setAttribute("aria-invalid", "true");
+        error.hidden = false;
+        error.textContent = `Expression is too long (${ev.target.value.length} characters); maximum is ${MAX_EXPRESSION_CHARS}`;
+        return;
+      }
       try {
         parse(ev.target.value);
       } catch (caught) {
@@ -410,6 +447,15 @@ function render() {
     const replacement = [...document.querySelectorAll(".matrix-select")].find((button) =>
       button.dataset.personaId === matrixFocus.personaId && button.dataset.field === matrixFocus.field);
     replacement?.focus({ preventScroll: true });
+  } else if (activeId) {
+    const replacement = document.getElementById(activeId);
+    replacement?.focus({ preventScroll: true });
+    if (inputFocus && replacement instanceof HTMLInputElement)
+      replacement.setSelectionRange(
+        inputFocus.selectionStart,
+        inputFocus.selectionEnd,
+        inputFocus.selectionDirection,
+      );
   }
 }
 
