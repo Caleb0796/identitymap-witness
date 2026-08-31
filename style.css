@@ -12,6 +12,10 @@ h1 { font-size: 1.45rem; margin: 0; letter-spacing: -.02em; }
 #copy-prompt-1 { background: #17212b; border-color: #17212b; color: #fffdf8; }
 #copy-prompt-1:hover { background: #1459d9; color: #fff; }
 #copy-status { min-height: 1.1rem; color: #08795e; font-size: .75rem; font-weight: 700; }
+.how { counter-reset: step; display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin: .55rem 0 0; padding: 0; list-style: none; color: #6b7683; font-size: .75rem; line-height: 1.4; }
+.how li { counter-increment: step; position: relative; flex: 1 1 15rem; padding-left: 1.4rem; }
+.how li::before { content: counter(step); position: absolute; left: 0; top: .02rem; width: 1.05rem; height: 1.05rem; border-radius: 50%; background: #e7e3d8; color: #5b6672; text-align: center; font: 600 .67rem/1.05rem ui-monospace, monospace; }
+.how b { color: #1c2733; }
 .clipboard-fallback { position: fixed; left: -9999px; top: 0; opacity: 0; }
 h2 { font-size: .95rem; margin: 0 0 .5rem; letter-spacing: -.01em; }
 .badges { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; }
@@ -21,6 +25,7 @@ h2 { font-size: .95rem; margin: 0 0 .5rem; letter-spacing: -.01em; }
 .badge.rev { background: #17212b; color: #fffdf8; }
 .card { margin: .9rem 0; padding: .9rem 1rem 1rem; background: #fffdf8; border: 1px solid #ddd6c7; border-radius: 10px; }
 .hint { color: #6b7683; font-size: .78rem; margin-bottom: .45rem; }
+.section-gloss { margin: -.25rem 0 .5rem; color: #6b7683; font-size: .78rem; }
 #priority-select { margin: 0 .25rem; padding: .2rem .35rem; border: 1px solid #cfc9bb; border-radius: 5px; background: #fff; color: #1c2733; font: 600 .75rem/1.5 ui-monospace, monospace; }
 #priority-select:focus { outline: 2px solid #1459d9; border-color: transparent; }
 table { border-collapse: collapse; width: 100%; }
@@ -29,6 +34,7 @@ table { border-collapse: collapse; width: 100%; }
 .table-scroll:focus-visible { outline: 3px solid #1459d9; outline-offset: 2px; }
 #grid input { min-width: 26rem; }
 #matrix { min-width: 38rem; }
+#witness:not(:has(> #all-clear:not([hidden]))) > .table-scroll:has(> #matrix > tbody:empty)::after { content: "No counterexamples yet — confirm rules, then let the agent run find."; display: block; padding: .55rem .7rem; border: 1px solid #e2dccd; border-top: 0; background: #faf7ef; color: #6b7683; font-size: .78rem; }
 th, td { border: 1px solid #e2dccd; padding: .38rem .55rem; text-align: left; font-size: .82rem; }
 th { background: #f1ede2; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: #5b6672; }
 #grid td:first-child, #matrix td:first-child { font: 600 .78rem/1.5 ui-monospace, monospace; }
@@ -71,3 +77,4 @@ td input[aria-invalid="true"] { border-color: #aa3434; outline: 2px solid #f3b8b
 #packet-state.blocked { color: #aa3434; font-weight: 700; }
 button#apply { margin-top: .55rem; padding: .45rem .9rem; border-radius: 7px; border: 1px solid #cfc9bb; background: #f1ede2; font: 600 .8rem/1.4 inherit; cursor: not-allowed; }
 button#apply:not([disabled]) { background: #08795e; color: #fff; border-color: #08795e; cursor: pointer; }
+.legend { margin-top: .7rem; padding-top: .55rem; border-top: 1px solid #e2dccd; color: #6b7683; font-size: .75rem; line-height: 1.45; }
