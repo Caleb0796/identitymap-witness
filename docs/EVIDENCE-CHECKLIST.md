@@ -9,7 +9,8 @@ This file intentionally does not mark human work complete.
       `/data/personas.json`, and `/src/tools/defs.mjs` from the remote origin.
       Confirm the `.mjs` response has a JavaScript content type. In a fresh
       WebMCP-capable browser, verify the consent gate, exactly two independent copy
-      buttons, visible copy status, Reset-as-reload behavior, r17, and five tools.
+      buttons, visible copy status, the **Reset demo** control's reload behavior,
+      r17, and five tools.
 
 - [ ] **Three cold human model-evaluation runs.** Execute
       [`docs/HUMAN-EVAL-PROTOCOL.md`](HUMAN-EVAL-PROTOCOL.md) on 2026-09-01 in
@@ -41,8 +42,9 @@ This file intentionally does not mark human work complete.
       [`docs/DEMO-SCRIPT.md`](DEMO-SCRIPT.md). Keep consent and human Confirm all
       visible, show the first minimal counterexample by 15 seconds, show an edit
       making evidence visibly STALE, show the agent re-read/re-find at the current
-      revision, and finish on a fresh GREEN packet without Apply. Record the final
-      filename and duration in `evidence/video-final.txt`.
+      revision, and finish on a fresh GREEN packet without clicking **Apply mapping
+      (manual page control)**. Record the final filename and duration in
+      `evidence/video-final.txt`.
 
 - [ ] **Freeze evidence commit (before flipping public).** `eval/out/` is
       gitignored, but README links `eval/out/report.json`. From the final code

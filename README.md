@@ -1,5 +1,9 @@
 # IdentityMap Witness
 
+Two concessions come first: unsaved-draft preview is already a first-party product
+pattern, and another page-local agent with the same state and rules could run the
+same deterministic engine.
+
 > IdentityMap Witness finds the smallest set of synthetic people proving every violated rule on an unsaved draft — and the proof dies when you edit what it depended on.
 
 This WebMCP Challenge entry is a profile-mapping workbench. A human defines the
@@ -19,7 +23,7 @@ or apply changes.
   reports 4/4 seeded defect classes, the audited size-3 oracle witness, zero
   write-oracle/hash/PII failures, `oracleAudited: true`, and no watermark. Generated
   eval output is intentionally git-ignored; reproduce it with `node eval/run.mjs`.
-- Final `npm test` count: **264 tests, 264 passed, 0 failed, 0 skipped**. No
+- Final `npm test` count: **281 tests, 281 passed, 0 failed, 0 skipped**. No
   coverage percentage is claimed.
 - The remaining entry work is human-run model evaluation, final video capture,
   public-repository verification, and submission. See
@@ -28,8 +32,8 @@ or apply changes.
 ## Two-phase judge path
 
 The first-screen action bar offers two independently labeled copy buttons with the
-exact evaluated prompts, a visible polite live-region copy result, and a Reset
-control that only reloads the page.
+exact evaluated prompts, a visible polite live-region copy result, and the
+**Reset demo** control, which only reloads the page.
 
 1. **Copy prompt 1 — setup.** The agent reads the session and stages exactly three
    invariants. Staging creates pending cards but does not change the confirmed pins
@@ -77,8 +81,13 @@ imw_profile_dir="$(mktemp -d)"
   http://127.0.0.1:4173
 ```
 
-Alternatively, open the [live demo](https://identitymap-witness.onrender.com) in a
-fresh WebMCP-capable browser profile and pass the visible consent gate.
+### Judge path (ChatGPT built-in browser)
+
+- Open ChatGPT's built-in browser and enable site tools for this site.
+- Navigate to the full `https://identitymap-witness.onrender.com` URL and pass the
+  visible consent gate.
+- Use **Copy prompt 1 — setup**, send it, and review the pending cards.
+- Click **Confirm all**, then use **Copy prompt 2 — after Confirm all** and send it.
 
 Run all executable gates from the repository root:
 
@@ -91,11 +100,8 @@ node eval/run.mjs               # thresholds, oracle binding, write oracle
 
 ## Scope and evidence honesty
 
-Two concessions come before the claim: unsaved-draft preview is already a
-first-party product pattern, and another page-local agent with the same state and
-rules could run the deterministic engine. The evaluated contribution is the
-page-authored safety workflow and its evidence lifecycle, not uniqueness or an
-impossibility result.
+The evaluated contribution is the page-authored safety workflow and its evidence
+lifecycle, not uniqueness or an impossibility result.
 
 The fixture has eight synthetic personas. State is tab-local; the witness search is
 exhaustive only at this fixture's scale; no real identity provider or save path is

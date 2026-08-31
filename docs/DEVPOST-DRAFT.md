@@ -14,7 +14,8 @@ five least-privilege WebMCP tools to inspect the current draft and exhaustively 
 the smallest set of synthetic personas covering every violated rule, show redacted
 field-level provenance, preview fixes without changing state, and prepare a review
 packet only from fresh evidence. Any relevant human edit invalidates the old proof.
-The agent must re-read and re-find at the new revision; Apply stays human-only.
+The agent must re-read and re-find at the new revision; Apply remains a manual page
+control and is not exposed as a WebMCP tool.
 
 The two-copy judge path makes that authority boundary visible. Prompt 1 stops with
 the rules staged as pending at r17. A human reviews the exact canonical content and
@@ -30,10 +31,10 @@ The project uses dependency-free Node 21+ and vanilla ES modules. One isomorphic
 engine implements the expression subset, value and candidate provenance,
 invariant checks, and exhaustive minimal-witness search for the page, tests, and
 evaluation. Strict tool schemas reject extra or malformed input. Staging produces a
-canonical pending object; only a real human DOM event can confirm its exact version
-and content. All five tools are failure-atomic, payloads are capped at 1,500
-characters, and evidence and packets are bound to the dependencies, revision, and
-fresh ids from which they were produced.
+canonical pending object; confirmation occurs only through the version-bound page
+control for that exact content. All five tools are failure-atomic, payloads are
+capped at 1,500 characters, and evidence and packets are bound to the dependencies,
+revision, and fresh ids from which they were produced.
 
 The Chrome 152 relay opens a fresh user-data directory with WebMCP enabled. Three
 cold registration sessions prove a completed five-tool round trip. A 12-round E2E
@@ -81,3 +82,33 @@ redaction boundary, and replace local content fingerprints with signed audit
 receipts where cross-session trust is required. The immediate submission work is
 more modest: execute the three fresh human model-evaluation scenarios, record the
 remote demo, and publish only the evidence those runs actually produce.
+
+## Testing instructions
+
+**ChatGPT built-in browser:** Open the built-in browser, enable site tools for the
+site, navigate to the full `https://identitymap-witness.onrender.com` URL, and pass
+the visible consent gate. Use **Copy prompt 1 — setup**, send it, review the pending
+cards, and click **Confirm all**. Then use **Copy prompt 2 — after Confirm all** and
+send it.
+
+**Local:** Clone the repository, run the tests, and start the local server:
+
+```bash
+git clone https://github.com/Caleb0796/identitymap-witness.git
+cd identitymap-witness
+npm test
+node harness/serve.mjs
+```
+
+Launch Chrome 152 in a fresh profile with WebMCP enabled:
+
+```bash
+imw_profile_dir="$(mktemp -d)"
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --user-data-dir="$imw_profile_dir" \
+  --enable-features=WebMCP \
+  http://127.0.0.1:4173
+```
+
+Follow the same two-prompt flow locally. **Apply mapping (manual page control)** is
+not exposed to the agent as a WebMCP tool and is never clicked in either path.
