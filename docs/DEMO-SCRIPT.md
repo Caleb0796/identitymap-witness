@@ -127,8 +127,8 @@ prompt 2 pasted, the find call returning. Open the video mid-result.
 
 - Action: return to the page holding GREEN; end card with the live URL and
   repository address.
-- **N6-1:** "This demo keeps the draft unsaved while the agent reviews it. WebMCP
-  lets the page define the boundary."
+- **N6-1:** "Any page with an unsaved draft can author this same contract. WebMCP
+  makes the page the authority — the party that knows the stakes."
 - **N6-2:** "IdentityMap Witness finds the smallest set of synthetic people
   proving every violated rule on an unsaved draft — and the proof dies when
   you edit what it depended on."
