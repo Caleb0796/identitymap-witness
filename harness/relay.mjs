@@ -3,7 +3,7 @@
 // completed round trip (WebMCP.enable returns OK even with no page API — measured;
 // recorded, never asserted). By-name calls go over the CDP WebMCP domain.
 import { execSync } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { startServer } from "./serve.mjs";
 import { launchChrome } from "./chrome.mjs";
 import { connect, invokeTool, textOf } from "./cdp.mjs";
@@ -835,12 +835,17 @@ async function e2e(baseUrl) {
     if (configuredTrace && !configuredTrace.startsWith("/"))
       throw new Error("IMW_E2E_TRACE_PATH must be absolute");
     const out = configuredTrace ?? `eval/out/relay-${sha}.json`;
-    const destination = configuredTrace
-      ? new URL(`file://${configuredTrace}`)
-      : new URL(`../${out}`, import.meta.url);
-    await writeFile(destination,
-      JSON.stringify({ sha, when: new Date().toISOString(), rounds: 12, trace }, null, 2),
-      { flag: "wx" });
+    const body = JSON.stringify({ sha, when: new Date().toISOString(), rounds: 12, trace }, null, 2);
+    if (configuredTrace) {
+      // Operator-captured evidence: exclusive create — never overwrite prior evidence.
+      await writeFile(new URL(`file://${configuredTrace}`), body, { flag: "wx" });
+    } else {
+      // Regenerated gate artifact (gitignored since R6): exclusive tmp + atomic rename,
+      // so every rerun lands fresh — eval's mtime freshness binding depends on it.
+      const tmp = new URL(`../eval/out/tmp-trace-${process.pid}.json`, import.meta.url);
+      await writeFile(tmp, body, { flag: "wx" });
+      await rename(tmp, new URL(`../${out}`, import.meta.url));
+    }
     ok(`e2e: 12 rounds green — stale rejection (r5), mismatch recovery (r9), pin-coverage flip (r10), packet freshness recovery (r11), inline validation (r12); trace → ${out}`);
   } finally {
     s.cdp.close();

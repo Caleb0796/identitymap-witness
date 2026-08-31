@@ -49,7 +49,16 @@ test("failure coverage installs request interception before navigation", () => {
     "Fetch interception must be active before navigation");
 });
 
-test("E2E traces never overwrite prior evidence", () => {
+test("trace writes: configured evidence is exclusive; default gate artifact is atomically replaced", () => {
   assert.match(source, /IMW_E2E_TRACE_PATH must be absolute/);
-  assert.match(source, /\{ flag: "wx" \}/);
+  const start = source.indexOf("const configuredTrace");
+  const end = source.indexOf("ok(`e2e:", start);
+  assert.ok(start >= 0 && end > start, "trace-write block must exist");
+  const block = source.slice(start, end);
+  assert.match(block, /if \(configuredTrace\) \{[\s\S]*?\{ flag: "wx" \}/,
+    "operator-captured evidence path must be exclusive-create (never overwrite)");
+  assert.match(block, /tmp-trace-\$\{process\.pid\}/,
+    "default trace must be written to a gitignored tmp file first");
+  assert.match(block, /writeFile\(tmp, body, \{ flag: "wx" \}\);\s*await rename\(tmp,/,
+    "default trace must land via atomic rename so every rerun is fresh (eval mtime binding)");
 });
