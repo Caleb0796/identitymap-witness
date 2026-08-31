@@ -33,8 +33,12 @@ because the required confirmation fields are absent. The DIRECT scenario in the
 human-eval protocol recaptures the complete run with pending confirmation and
 **Confirm all** visible.
 
-**The UI reads as abstract at first glance — acknowledged; rejected for this
-cycle.** The UI is frozen days from the deadline, and the E2E trace asserts its
-first-screen controls, confirmation flow, matrix, and provenance structure.
-First-glance comprehension is instead carried by the 3-minute demo's cold open
-and the README's two-phase judge path.
+**The UI reads as abstract at first glance — acknowledged; initially deferred,
+then implemented the same day at the lead's direction.** The concern was real but
+the risk was in the JavaScript, not the markup: the fix (`e2e35b3`) is
+additive-only static content — a four-step guide strip under the copy buttons,
+a plain-language gloss under each section heading, a GREEN/STALE/Pending legend,
+and a CSS-only empty state for the counterexample matrix that suppresses itself
+during a clean sweep. `app.js` is untouched, no focusable elements were added,
+and the full gate suite — including the 12-round real-DOM e2e — was re-run green
+on the result.
