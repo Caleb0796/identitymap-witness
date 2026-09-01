@@ -1,24 +1,68 @@
-# IdentityMap Witness demo — 3-minute shooting script (v3)
+# IdentityMap Witness demo — 3-minute shooting script (v4)
 
 Record on the remote Render origin (https://identitymap-witness.onrender.com) in
 ChatGPT's built-in browser. Keep the consent gate visible on camera, use synthetic
 personas only, narrate in English with audio, and keep the final cut under 3:00
-(target 2:55). The first counterexample result must be visible within the first
-15 seconds — this script satisfies that with a cold open. Upload to YouTube as
-**public** (unlisted does not satisfy the rules).
+(target 2:55). Upload to YouTube as **public** (unlisted does not satisfy the
+rules).
 
 Two concessions come first: draft preview exists as a first-party pattern, and
 another page-local agent could run this same engine. The contribution claimed
 below is the page-authored contract and its evidence lifecycle.
 
+Structure: explain first (what it is, the problem, the benefit), then the live
+demo, then impact. The first minimal counterexample must still be visible within
+the first 15 seconds — satisfy that with B-roll: Part 1's narration plays over
+pre-recorded app footage that includes the witness-matrix moment, not over
+slides.
+
+## Context for a collaborator with zero background (human or AI)
+
+Read this once and the script below needs no other context.
+
+- The product is a single web page: an **identity-mapping workbench** holding an
+  intentionally broken, unsaved draft. The draft maps person fields
+  (displayName, group, managerId, department, email) from three sources
+  (ad, hris, okta) using small expressions. Eight synthetic personas (P1–P8)
+  are the test population. Four defects are seeded: a casing bug in the group
+  expression, an empty string standing in for a missing manager, a flipped
+  source priority, and a present-but-empty value that wins a merge.
+- The page registers **five WebMCP tools** via `document.modelContext` that a
+  browser agent (e.g. ChatGPT's built-in browser) can call: read the session,
+  stage rule proposals, find a minimal counterexample set, preview a redacted
+  patch, prepare a review packet. **There is no save or apply tool.**
+- Key on-screen elements: a revision badge (`r17` at load), two copy buttons
+  (**Copy prompt 1 — setup**, **Copy prompt 2 — after Confirm all**), a
+  **Reset demo** button (reloads the page), pending-rule cards (each shows the
+  canonical rule fields, a version, and a content fingerprint), a **Confirm
+  all** button, a STALE banner, a counterexample matrix, a provenance rail, a
+  review packet with GREEN/blocked states, and **Apply mapping (manual page
+  control)** — a button the agent cannot invoke.
+- The verified walk (numbers are load-bearing; do not improvise): fresh page is
+  r17 → human clicks Confirm all → r18 → agent finds witness **{P2, P3, P4}** →
+  human fixes managerId (`user.managerId`) → r19, evidence goes STALE → agent
+  re-finds **{P2, P4}** → human fixes group → r20 → re-find **{P4}** → human
+  switches priority from **ad → hris → okta** to **hris → ad → okta** → r21,
+  all evidence stales → re-find → clean sweep, packet prepared GREEN. Staging
+  and find calls never change the revision; only human confirm/edits do.
+- After Confirm all, page focus lands on the **Copy prompt 2** button on its
+  own — no mouse hunting on camera.
+- Terminal receipts that exist and can be filmed: `node tools/verify.mjs` ends
+  in `STATUS CODE_COMPLETE`; `node eval/run.mjs` ends in `RESULT: PASS`;
+  `npm test` reports 281 passing; the e2e writes a 12-round trace file.
+- A real platform constraint shaped the design: a pending WebMCP tool call dies
+  after roughly 22 seconds, so human approval cannot happen inside a tool call.
+  Staging returns immediately; the human confirms on the page; the agent is
+  told to re-read afterwards.
+
 ## How this script maps to the judging criteria
 
 | Criterion | Where it lands |
 |---|---|
-| WebMCP Leverage | Act 1 (five least-privilege tools; staging cannot confirm; two-phase handshake designed around the measured ~22s tool-call timeout) and Act 3 (revision-bound evidence) |
-| Execution | Act 0 (working product on a remote origin), Act 2 (exhaustive minimal witness + redacted provenance), Act 4 (recovery to a gated all-clear), Act 5 (tests, e2e trace, write oracle) |
-| Potential Impact | Act 6 (unsaved-draft applicability; the page authors the boundary) |
-| Creativity & Ambition | Act 3 (evidence with a lifecycle — proof dies on dependency edit) and Act 5 (stated concessions as a feature, not a footnote) |
+| WebMCP Leverage | Part 1 (the page authors a five-tool, least-privilege surface) and Part 2 (two-phase confirm; revision-bound evidence) |
+| Execution | Part 2 (complete working flow on a remote origin) and Part 3 (tests, e2e trace, write oracle) |
+| Potential Impact | Part 1 (the problem is general) and Part 3 (any page with a draft can author the same contract) |
+| Creativity & Ambition | Part 2 (proof with a lifecycle — evidence dies on dependency edits) and Part 3 (concessions stated plainly) |
 
 ## Verbatim two-prompt handshake
 
@@ -33,105 +77,108 @@ while the staged rules await visible human confirmation.
 
 > I confirmed the rules. Re-read the session, then find the minimal counterexample set. Walk me through fixing every violation: tell me exactly which expression or the priority order to change in the page UI. After each of my edits, re-find at the current revision. When violations reach zero, prepare the review packet from the fresh evidence ids.
 
-## Act-by-act script
+## The script
 
-Each act lists on-screen action and the narration lines to read. Lines are short
-on purpose; read them slowly. If the cut runs long, drop N2-4 first, then N5-1's
-enumeration.
+Each block gives SCREEN (what is on camera), ACTION (what the human does), and
+SAY (narration to read aloud, written to sound like a person, not a press
+release). Read at a relaxed pace; the lines are sized for it.
 
-### Act 0 — cold open: the result (0:00–0:15)
+### Part 1 — what this is, the problem, the benefit (0:00–0:45)
 
-Pre-record this moment separately: page already at r18 with rules confirmed,
-prompt 2 pasted, the find call returning. Open the video mid-result.
+SCREEN: pre-recorded B-roll of the live app, in this order: the full page at
+r17 → the four-step guide strip → pending-rule cards appearing → **the witness
+matrix filling with {P2, P3, P4}** (this shot must land inside the first 15
+seconds) → the STALE banner flashing after an edit. No slides.
 
-- Action: matrix fills with the minimal witness `{P2, P3, P4}`; hold on the
-  matrix and the revision badge.
-- **N0-1:** "This profile-mapping draft is unsaved — and broken."
-- **N0-2:** "An agent just proved it: three synthetic people covering every
-  violated rule. Its page tools cannot save, apply, or change the draft."
-- **N0-3:** "Rewind — the best part is what the agent could *not* do."
+SAY:
+1. "This is IdentityMap Witness. It's a web page where an AI agent helps you
+   review unsaved work — here, a broken identity-mapping draft — and the page
+   itself decides what the agent is allowed to do."
+2. "Because that's the real problem with agents and drafts: you get 'looks
+   fine to me', and you can't tell if it's true. To get real help you'd
+   normally hand over save and apply. And while you keep editing, the agent's
+   old answers quietly go stale underneath you."
+3. "So this page publishes exactly five WebMCP tools: read the draft, propose
+   rules, prove violations, preview a fix, prepare a review. No save. No
+   apply. Rules only turn on when I click. And every proof is pinned to a
+   revision of the draft — that part matters in a minute."
 
-### Act 1 — the handshake (0:15–0:50)
+### Part 2 — the demo (0:45–2:20)
 
-- Action: click **Reset demo** (page reloads), pass the consent gate on camera,
-  badge shows r17. Click **Copy prompt 1 — setup**, paste into ChatGPT, send.
-- **N1-1:** "The page registers five WebMCP tools. None can save. None can
-  confirm rules."
-- Action: the agent reads and stages; pending-rule cards show every canonical
-  field, a version, and a content fingerprint. The revision badge still shows r17.
-- **N1-2:** "A pending tool call dies in about twenty-two seconds — so approval
-  can't hide inside a tool call. Staging returns instantly, as a proposal."
-- **N1-3:** "Every canonical field, a version, a content fingerprint. The revision
-  hasn't moved."
-- Action: click **Confirm all**; badge becomes r18; focus lands on the
-  **Copy prompt 2 — after Confirm all** button — the page itself points at the
-  next step.
-- **N1-4:** "My click — bound to that exact version — puts the rules in force.
-  The page authors the safety contract. Not the agent."
+D1 — the handshake (0:45–1:12)
+- SCREEN: live recording starts. Consent gate on camera.
+- ACTION: click **Reset demo**; pass the consent gate; badge shows r17. Click
+  **Copy prompt 1 — setup**, paste into ChatGPT, send. The agent stages three
+  rules; pending cards appear; the badge still shows r17. Then click
+  **Confirm all**; badge becomes r18; focus lands on the second copy button.
+- SAY:
+4. "Let's run it for real. Fresh page, revision seventeen. I copy prompt one
+   into ChatGPT — it asks the agent to stage three business rules and then
+   stop."
+5. "And there they are — pending cards, with a version and a fingerprint of
+   the exact text. The revision hasn't moved. It proposed the rules; it can't
+   turn them on. That part is my click."
+6. (droppable if over time) "It couldn't wait for me inside a tool call even
+   if it wanted to — those die in about twenty seconds. So waiting became
+   page state instead."
 
-### Act 2 — the proof (0:50–1:25)
+D2 — the proof (1:12–1:37)
+- ACTION: click **Copy prompt 2 — after Confirm all** (focus is already on
+  it), paste, send. The agent re-reads, then finds. The matrix fills with
+  {P2, P3, P4}. Open one provenance row that shows a losing source candidate.
+- SAY:
+7. "I confirmed, so — prompt two. The agent re-reads and goes hunting. And
+   here's the heart of it: three synthetic people. That's the smallest set
+   that triggers every broken rule in this draft. Not a sample — proof, with
+   provenance: which source won, which lost, and why."
 
-- Action: click **Copy prompt 2 — after Confirm all**, paste, send. The agent
-  re-reads the confirmed session, then finds. Matrix shows `{P2, P3, P4}`.
-- **N2-1:** "Prompt two: the agent re-reads the confirmed session, then hunts."
-- **N2-2:** "Not a sample — the smallest set of synthetic people covering every
-  violated rule, found by exhaustive search."
-- Action: open one provenance row, including a losing source candidate.
-- **N2-3:** "The provenance rail shows which source won, which lost, and why.
-  Identity-bearing values stay minimized."
-- **N2-4:** "Four defect classes are live in this draft: a casing bug, an empty
-  string posing as a manager, a flipped source priority, and an empty value
-  that wins a merge."
+D3 — proof dies (1:37–2:00)
+- ACTION: the agent names the exact fix; type `user.managerId` into the grid
+  input. Badge becomes r19; STALE banner appears; stale evidence is struck
+  through. The agent re-reads and re-finds; the witness shrinks to {P2, P4}.
+- SAY:
+8. "Now watch this. It tells me the exact fix, I type it — one field. Revision
+   nineteen. And everything that depended on that field just died: banner,
+   struck-through rows, the lot. It can't reuse any of it. It re-checks, and
+   the witness shrinks to two."
 
-### Act 3 — proof dies (1:25–1:55)
+D4 — finish clean (2:00–2:20)
+- ACTION: apply the agent's group fix (r20, re-find shows {P4}); switch the
+  priority selector from **ad → hris → okta** to **hris → ad → okta** (r21 —
+  every remaining evidence record stales — re-find reaches a clean sweep);
+  the packet is prepared and holds GREEN. Do not touch **Apply mapping
+  (manual page control)**.
+- SAY:
+9. "Two more fixes, same rhythm — every edit gets a fresh check. Down to one
+   person, then zero. The green light only shows because this sweep covered
+   every rule, and the packet is built from fresh evidence only. Apply? Still
+   an ordinary button on the page. The agent just doesn't have it."
 
-- Action: the agent names the exact fix; type `user.managerId` into the real
-  grid input. Badge becomes r19; the STALE banner appears; dependent evidence
-  is struck through.
-- **N3-1:** "The agent tells me exactly what to fix. I type it — one field."
-- **N3-2:** "Revision nineteen. Every piece of evidence that depended on that
-  field just died. Fingerprint-level, immediate."
-- Action: the agent re-reads at r19 and re-finds; the witness shrinks to
-  `{P2, P4}`.
-- **N3-3:** "No reuse of dead proof: it re-reads at the current revision and
-  re-finds. The witness shrinks to two people."
+### Part 3 — receipts, honesty, impact (2:20–2:55)
 
-### Act 4 — finish honestly (1:55–2:20)
+- SCREEN: quick terminal cuts — `node tools/verify.mjs` tail with
+  `STATUS CODE_COMPLETE`, `node eval/run.mjs` tail with `RESULT: PASS`, the
+  12-round trace file. Then back to the page holding GREEN; end card with the
+  live URL and repository address.
+- SAY:
+10. "Under the hood: two hundred eighty-one tests, a twelve-round end-to-end
+    trace driving real Chrome, and a write oracle that audits every tool call
+    — a failed call has to leave state byte-for-byte untouched."
+11. (protected — never cut) "Two honest notes. Draft preview itself isn't new.
+    And another agent living in this page could run the same engine. What's
+    new is the contract."
+12. "And the contract is the point of WebMCP: the page knows the stakes, so
+    the page sets the boundary — any site with a draft can wire this up.
+    IdentityMap Witness finds the smallest set of synthetic people proving
+    every violated rule on an unsaved draft — and the proof dies when you
+    edit what it depended on."
 
-- Action: apply the agent's group fix through the grid (r20), let it re-find;
-  change the priority selector from **ad → hris → okta** to
-  **hris → ad → okta** (r21) — every remaining evidence record stales — let it
-  re-find to a clean sweep, then prepare the packet. Hold on GREEN. Never click
-  **Apply mapping (manual page control)**.
-- **N4-1:** "Two more fixes. Each one kills what depended on it; each gets a
-  fresh check at the current revision."
-- **N4-2:** "Zero violations — and the all-clear only shows because this sweep
-  covered every confirmed rule. The review packet is built from fresh evidence
-  only."
-- **N4-3:** "Apply is a manual page control, not a WebMCP tool. We never click
-  it."
+### If the cut runs long
 
-### Act 5 — receipts and concessions (2:20–2:40)
-
-- Action: quick terminal cuts — `node tools/verify.mjs` ending in
-  `STATUS CODE_COMPLETE`, `node eval/run.mjs` ending in `RESULT: PASS`, the
-  12-round trace file, and the test count.
-- **N5-1:** "Under the hood: 281 tests, a twelve-round real-browser trace, and
-  a write oracle auditing every tool call — a failed call must leave state
-  byte-identical."
-- **N5-2:** "Two concessions: draft preview exists as a first-party pattern;
-  another page agent could run this same engine. The claim is narrower — the
-  page-authored contract and this evidence lifecycle."
-
-### Act 6 — impact and close (2:40–2:55)
-
-- Action: return to the page holding GREEN; end card with the live URL and
-  repository address.
-- **N6-1:** "Any page with an unsaved draft can author this same contract. WebMCP
-  makes the page the authority — the party that knows the stakes."
-- **N6-2:** "IdentityMap Witness finds the smallest set of synthetic people
-  proving every violated rule on an unsaved draft — and the proof dies when
-  you edit what it depended on."
+Cut in this order, nothing else: line 6 (the twenty-second aside), then the
+"with provenance…" tail of line 7, then compress line 10 to "281 tests, a
+12-round real-browser trace, and a write oracle on every call." Line 11 is
+never cut.
 
 ## Recording checklist
 
@@ -139,13 +186,14 @@ prompt 2 pasted, the find call returning. Open the video mid-result.
    browser permission settings; pick a model with WebMCP support enabled.
 2. Type the full `https://identitymap-witness.onrender.com` URL (include the
    scheme).
-3. One full dry run first. State is tab-local: the **Reset demo** control reloads
-   the page and restores r17, so retakes are cheap.
+3. One full dry run first. State is tab-local: **Reset demo** reloads the page
+   and restores r17, so retakes are cheap.
 4. Record with the ChatGPT side panel visible so tool calls are on camera.
-5. Shoot act by act; keep raw takes. If the agent misbehaves, use **Reset demo**
-   and retake — a rejected call (STALE_CONFIRM, stale evidence) is usable footage,
+5. Record Part 2 first, act by act; keep raw takes. Assemble Part 1's B-roll
+   from the best Part 2 footage afterwards. If the agent misbehaves, Reset and
+   retake — a rejected call (STALE_CONFIRM, stale evidence) is usable footage,
    not a failure: it shows the contract firing.
-6. Narration: read the N-lines slowly; re-record audio in post if needed.
+6. Narration: read the SAY lines slowly; re-record audio in post if needed.
 7. Export 1080p, final length under 3:00. Upload to YouTube **public**.
 8. Write `evidence/video-final.txt` with the YouTube URL, the HEAD commit sha,
    and the recording date.
@@ -160,4 +208,4 @@ prompt 2 pasted, the find call returning. Open the video mid-result.
 | 10–15s | Click **Copy prompt 2 — after Confirm all**, paste it, and cut to the returned minimal witness `{P2, P3, P4}` and four matrix rows. | “Three synthetic people prove every violated rule in this unsaved draft.” |
 | 16–21s | Open one provenance row, then change managerId through the real grid input; r19 and the STALE banner appear. | “I edit one dependency. The evidence that relied on it dies immediately.” |
 | 22–26s | The agent re-reads at r19 and re-finds the smaller `{P2, P4}` witness before suggesting the next edit. | “The next decision starts from the current draft, not the dead proof.” |
-| 27–30s | Fast-cut: human group edit → re-find at r20; human priority edit to **hris → ad → okta** → re-find at r21; then prepare from the fresh clean-sweep evidence and hold on GREEN. Do not click **Apply mapping (manual page control)**. | “Every edit gets a fresh check; only fresh evidence closes the review.” |
+| 27–30s | Fast-cut: human group edit → re-find at r20; human priority change from **ad → hris → okta** to **hris → ad → okta** → re-find at r21; then prepare from the fresh clean-sweep evidence and hold on GREEN. Do not click **Apply mapping (manual page control)**. | “Every edit gets a fresh check; only fresh evidence closes the review.” |
