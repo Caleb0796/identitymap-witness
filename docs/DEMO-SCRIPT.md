@@ -1,4 +1,4 @@
-# IdentityMap Witness demo — 3-minute shooting script (v4)
+# IdentityMap Witness demo — 3-minute shooting script (v5)
 
 Record on the remote Render origin (https://identitymap-witness.onrender.com) in
 ChatGPT's built-in browser. Keep the consent gate visible on camera, use synthetic
@@ -20,13 +20,20 @@ slides.
 
 Read this once and the script below needs no other context.
 
-- The product is a single web page: an **identity-mapping workbench** holding an
-  intentionally broken, unsaved draft. The draft maps person fields
-  (displayName, group, managerId, department, email) from three sources
-  (ad, hris, okta) using small expressions. Eight synthetic personas (P1–P8)
-  are the test population. Four defects are seeded: a casing bug in the group
-  expression, an empty string standing in for a missing manager, a flipped
-  source priority, and a present-but-empty value that wins a merge.
+- The product is a single web page: an **identity-mapping workbench**. The
+  real-world job it models: a company's employee data lives in three systems
+  — `ad` (Active Directory, the IT account system), `hris` (the HR system),
+  and `okta` (the sign-on/permissions system) — and an admin writes merge
+  rules deciding, per field (displayName, group, managerId, department,
+  email), which system wins and how values combine. The page holds an
+  intentionally broken, **unsaved draft** of those rules. Eight synthetic
+  personas (P1–P8) are the test population; no real system is connected.
+  Four defects are seeded, each with a real-world sting: a case-sensitive
+  check lets a `Contractor` (capital C) land in the employees group (an
+  access-control mistake); a missing manager becomes an empty string instead
+  of null (breaks anything that checks for a manager); Active Directory
+  incorrectly outranks HR for department (stale data wins); and a
+  present-but-empty value beats a real value in the merge.
 - The page registers **five WebMCP tools** via `document.modelContext` that a
   browser agent (e.g. ChatGPT's built-in browser) can call: read the session,
   stage rule proposals, find a minimal counterexample set, preview a redacted
@@ -83,7 +90,7 @@ Each block gives SCREEN (what is on camera), ACTION (what the human does), and
 SAY (narration to read aloud, written to sound like a person, not a press
 release). Read at a relaxed pace; the lines are sized for it.
 
-### Part 1 — what this is, the problem, the benefit (0:00–0:45)
+### Part 1 — what this is, the problem, the benefit (0:00–0:52)
 
 SCREEN: pre-recorded B-roll of the live app, in this order: the full page at
 r17 → the four-step guide strip → pending-rule cards appearing → **the witness
@@ -91,56 +98,56 @@ matrix filling with {P2, P3, P4}** (this shot must land inside the first 15
 seconds) → the STALE banner flashing after an edit. No slides.
 
 SAY:
-1. "This is IdentityMap Witness. It's a web page where an AI agent helps you
-   review unsaved work — here, a broken identity-mapping draft — and the page
-   itself decides what the agent is allowed to do."
-2. "Because that's the real problem with agents and drafts: you get 'looks
-   fine to me', and you can't tell if it's true. To get real help you'd
-   normally hand over save and apply. And while you keep editing, the agent's
-   old answers quietly go stale underneath you."
-3. "So this page publishes exactly five WebMCP tools: read the draft, propose
-   rules, prove violations, preview a fix, prepare a review. No save. No
-   apply. Rules only turn on when I click. And every proof is pinned to a
-   revision of the draft — that part matters in a minute."
+1. "If you run user accounts for a company, you know this job: people's data
+   lives in three systems — Active Directory, HR, and Okta — and something
+   has to merge them into one profile. This page is that mapping. And this
+   draft of it is broken."
+2. "Broken quietly, too. A contractor is about to land in the employees group
+   because of a capital letter. Someone with no manager got an empty string
+   instead of null. And the wrong system is winning the department field."
+3. "I want an AI agent to catch all that before I save — without handing it
+   the keys. So the page gives it five WebMCP tools: read the draft, propose
+   rules, prove what's broken, preview a fix, prepare a review. No save. No
+   apply. And every proof is pinned to the draft's version."
 
-### Part 2 — the demo (0:45–2:20)
+### Part 2 — the demo (0:52–2:20)
 
-D1 — the handshake (0:45–1:12)
+D1 — the handshake (0:52–1:14)
 - SCREEN: live recording starts. Consent gate on camera.
 - ACTION: click **Reset demo**; pass the consent gate; badge shows r17. Click
   **Copy prompt 1 — setup**, paste into ChatGPT, send. The agent stages three
   rules; pending cards appear; the badge still shows r17. Then click
   **Confirm all**; badge becomes r18; focus lands on the second copy button.
 - SAY:
-4. "Let's run it for real. Fresh page, revision seventeen. I copy prompt one
-   into ChatGPT — it asks the agent to stage three business rules and then
-   stop."
-5. "And there they are — pending cards, with a version and a fingerprint of
-   the exact text. The revision hasn't moved. It proposed the rules; it can't
-   turn them on. That part is my click."
-6. (droppable if over time) "It couldn't wait for me inside a tool call even
-   if it wanted to — those die in about twenty seconds. So waiting became
-   page state instead."
+4. "Watch it work. I copy prompt one into ChatGPT. It asks the agent to stage
+   three rules in plain English — contractors never go in the employees
+   group; no manager means null; HR is the source of truth for department —
+   and then stop."
+5. "The rules come back as pending cards: exact text, a version, a
+   fingerprint. But look at the badge — nothing changed. The agent can
+   propose. Only my click makes them real."
+6. (include only if the cut runs short) "It couldn't wait for my click inside
+   a tool call anyway — those die in twenty seconds. So waiting became page
+   state."
 
-D2 — the proof (1:12–1:37)
+D2 — the proof (1:14–1:38)
 - ACTION: click **Copy prompt 2 — after Confirm all** (focus is already on
   it), paste, send. The agent re-reads, then finds. The matrix fills with
   {P2, P3, P4}. Open one provenance row that shows a losing source candidate.
 - SAY:
-7. "I confirmed, so — prompt two. The agent re-reads and goes hunting. And
-   here's the heart of it: three synthetic people. That's the smallest set
-   that triggers every broken rule in this draft. Not a sample — proof, with
-   provenance: which source won, which lost, and why."
+7. "Prompt two. The agent re-reads, then hunts. Three test people — P2, P3,
+   P4. That's the smallest group that trips every broken rule at once. Click
+   a row and you get receipts: which system's value won, which lost, and
+   why."
 
-D3 — proof dies (1:37–2:00)
+D3 — proof dies (1:38–2:00)
 - ACTION: the agent names the exact fix; type `user.managerId` into the grid
   input. Badge becomes r19; STALE banner appears; stale evidence is struck
   through. The agent re-reads and re-finds; the witness shrinks to {P2, P4}.
 - SAY:
-8. "Now watch this. It tells me the exact fix, I type it — one field. Revision
-   nineteen. And everything that depended on that field just died: banner,
-   struck-through rows, the lot. It can't reuse any of it. It re-checks, and
-   the witness shrinks to two."
+8. "It tells me the exact fix. I type it — the manager field. Version
+   nineteen — and look: every proof that touched that field just died on
+   screen, struck through. It re-checks. Now it's two people."
 
 D4 — finish clean (2:00–2:20)
 - ACTION: apply the agent's group fix (r20, re-find shows {P4}); switch the
@@ -149,36 +156,34 @@ D4 — finish clean (2:00–2:20)
   the packet is prepared and holds GREEN. Do not touch **Apply mapping
   (manual page control)**.
 - SAY:
-9. "Two more fixes, same rhythm — every edit gets a fresh check. Down to one
-   person, then zero. The green light only shows because this sweep covered
-   every rule, and the packet is built from fresh evidence only. Apply? Still
-   an ordinary button on the page. The agent just doesn't have it."
+9. "Same rhythm twice more. Fix the contractor check — down to one. Flip the
+   order so HR beats Active Directory — everything re-checks — zero. Green
+   only lights up because the sweep covered every rule with fresh proof. And
+   Apply? A plain button on the page. The agent doesn't have it."
 
-### Part 3 — receipts, honesty, impact (2:20–2:55)
+### Part 3 — receipts, honesty, impact (2:20–2:58)
 
 - SCREEN: quick terminal cuts — `node tools/verify.mjs` tail with
   `STATUS CODE_COMPLETE`, `node eval/run.mjs` tail with `RESULT: PASS`, the
   12-round trace file. Then back to the page holding GREEN; end card with the
   live URL and repository address.
 - SAY:
-10. "Under the hood: two hundred eighty-one tests, a twelve-round end-to-end
-    trace driving real Chrome, and a write oracle that audits every tool call
-    — a failed call has to leave state byte-for-byte untouched."
-11. (protected — never cut) "Two honest notes. Draft preview itself isn't new.
-    And another agent living in this page could run the same engine. What's
-    new is the contract."
-12. "And the contract is the point of WebMCP: the page knows the stakes, so
-    the page sets the boundary — any site with a draft can wire this up.
-    IdentityMap Witness finds the smallest set of synthetic people proving
-    every violated rule on an unsaved draft — and the proof dies when you
-    edit what it depended on."
+10. "Behind it: two hundred eighty-one tests, a twelve-round trace in real
+    Chrome, and a write oracle on every single call."
+11. (protected — never cut) "Two honest notes: draft preview isn't a new
+    idea, and another agent living in this page could run the same engine.
+    What's new is the contract."
+12. "That's WebMCP's point — the page knows the stakes, so the page sets the
+    rules. Any site with a draft can do this. IdentityMap Witness finds the
+    smallest set of synthetic people proving every violated rule on an
+    unsaved draft — and the proof dies when you edit what it depended on."
 
 ### If the cut runs long
 
-Cut in this order, nothing else: line 6 (the twenty-second aside), then the
-"with provenance…" tail of line 7, then compress line 10 to "281 tests, a
-12-round real-browser trace, and a write oracle on every call." Line 11 is
-never cut.
+Line 6 is already out of the default cut — add it back only if the runtime
+lands under 2:50. If the cut runs long, trim in this order, nothing else: the
+"Click a row…" tail of line 7, then line 2's third example, then line 10.
+Line 11 is never cut.
 
 ## Recording checklist
 
