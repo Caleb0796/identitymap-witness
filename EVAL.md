@@ -54,7 +54,9 @@ Gate: exit 0.
 
 ## Layer 3 — protocol E2E relay (scripted; labeled protocol, not agent)
 
-`node harness/relay.mjs --e2e`, one browser session, rounds:
+`node harness/relay.mjs --e2e`: first five fresh-profile fail-closed starts
+(invalid JSON, empty, missing, duplicate, wrong-shape personas fixture) assert the
+disabled UI and zero registered tools; then one browser session, rounds:
 1. read_mapping_session → r17
 2. stage a hostile-HTML group at r17, assert visible text/no execution/no pins,
    retain the v1 Confirm control, then real-DOM Discard; stage 3 rules as pending v2
@@ -101,12 +103,12 @@ EXPECTED AND LABELED: 0/4 — the defects are session-introduced BY CONSTRUCTION
 the number quantifies the workflow property "today's mistakes live pre-save",
 not superiority. The report prints this label verbatim.
 
-`eval/interaction-model.md` (was "arm A"): the per-persona manual-preview count
-model moves to prose with its assumptions; it is NOT in report.json (review
-finding: a formula is not an observed arm).
+The per-persona manual-preview count model (was "arm A") is retired: it was
+never written up as `eval/interaction-model.md` and it is NOT in report.json
+(review finding: a formula is not an observed arm).
 
 Browser-Use / Full-CDP: designs remain in this file's git history; they are
-DESIGNED-NOT-RUN and appear in README + video limitations, never in claims.
+DESIGNED-NOT-RUN and appear in the README and Devpost limitations, never in claims.
 
 `eval/run.mjs`: layer gates → scorer → ablation → final per-call write oracle →
 `eval/out/report.json`. The oracle re-hashes both raw snapshots in Node and requires:
@@ -130,8 +132,8 @@ string stays false in loop commits — commit author check).
 
 ALL of: scorer 4/4 classes; false positives ≤ 1; witness size == 3 matching an
 oracle set; four-hash write-oracle failures = 0; failed-call full-state hash
-failures = 0; PII canary leaks = 0; layer gates all exit 0; report has
-`oracleAudited: true` and `watermark: null`.
+failures = 0; PII canary leaks = 0; ablation visible 0/4 (by construction); layer
+gates all exit 0; report has `oracleAudited: true` and `watermark: null`.
 
 ## Kill / abort gates (all executable — a script can evaluate each)
 

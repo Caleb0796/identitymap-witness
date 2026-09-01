@@ -1,5 +1,7 @@
 # Codex Desktop plan — evidence tasks 1 & 2
 
+> **Superseded (2026-09-01).** Historical execution plan from 2026-08-29. Its numbers (54/54 tests, 10-round E2E), the direct-pin driver prompts, and the evidence JSON template are obsolete: current gates are 281 tests and a 12-round E2E; staging leaves r17 until a human clicks Confirm all; the evidence verifier also requires `pendingConfirmationObserved` and `humanConfirmAllObserved`. Authorities: `SPEC.md` → `EVAL.md` → `docs/CODEX-REMEDY-PLAN.md`.
+
 Self-contained objective for Codex Desktop. Repo: `/Users/calebwei/mcp/identitymap-witness`
 (git, remote `Caleb0796/identitymap-witness`, private). Live page:
 https://identitymap-witness.onrender.com — a WebMCP demo (5 tools on

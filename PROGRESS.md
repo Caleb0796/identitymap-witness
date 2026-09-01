@@ -13,3 +13,5 @@
 2026-08-29T22:50:38Z DEPLOY done — https://identitymap-witness.onrender.com live; 4 paths 200+MIME ok; remote smoke: present, 5 tools, roundtrip r17
 2026-08-29T23:55:33Z run2 review triaged — 2 real safety holes FIXED (preview-non-closing, pin-content staling); 54/54, e2e 10r, smoke x3, verify CODE_COMPLETE
 2026-08-29T23:59:59Z UI r4 — provenance rail (losing sources), stale banner, unpin chips, V1-style evidence badges; 54/54, smoke, e2e green
+
+2026-09-01 — `node tools/verify.mjs` (pre-freeze baseline): npm test 281/281; --smoke exit 0; --e2e exit 0 (12 rounds + 5 fail-closed starts); eval/run.mjs exit 0 → STATUS CODE_COMPLETE. Human items still TODO: ChatGPT-browser evidence, video, Devpost submission.

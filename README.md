@@ -5,7 +5,12 @@ identity providers before those profiles drive access. A subtle mapping mistake 
 give a contractor employee permissions, erase a manager relationship, or let stale
 directory data override HR.
 
-> Catch identity-mapping mistakes before they go live. A WebMCP agent proves every broken rule with the fewest test users, then rechecks every edit while a human keeps control.
+> Catch identity-mapping mistakes before they go live. A WebMCP agent proves every broken rule with the fewest synthetic test users, then rechecks every edit while a human keeps control.
+
+Two concessions first: unsaved-draft preview already exists as a first-party
+product pattern, and another page-local agent with the same state and rules could
+run the same deterministic engine. What this entry adds is the page-authored safety
+contract and an evidence lifecycle that makes old proof expire.
 
 IdentityMap Witness is a WebMCP-powered workbench for reviewing that unsaved draft.
 A human confirms the safety rules; five page-authored `document.modelContext` tools
@@ -15,6 +20,9 @@ and prepare a review packet only from fresh evidence. Every relevant edit makes
 dependent proof stale. No WebMCP tool can save or apply changes.
 
 ![IdentityMap Witness minimal counterexample workflow](docs/assets/devpost/02-witness.png)
+
+*Page tagline: finds the smallest set of synthetic people proving every violated
+rule on an unsaved draft — and the proof dies when you edit what it depended on.*
 
 **Live demo:** https://identitymap-witness.onrender.com
 

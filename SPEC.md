@@ -335,18 +335,22 @@ label or `event.isTrusted` check.
 
 ## 11. Demo beats (single direction, updated to golden walk)
 
-30s: 0–6s P1 all green → 7–14s agent stages 3 invariants at r17 and the human
-reviews/Confirms all (r18); agent returns witness {P2,P3,P4} with provenance →
-15–22s human fixes `managerId` expr in the UI (r18→r19) → 23–27s stale packet
-REJECTED (`STALE_EVIDENCE`) → 28–30s re-find +
-packet green; Apply untouched. 3min: pain 20s → dirty draft tour 25s → five-tool
-loop 55s → ablation + protocol-E2E receipts 40s → stale/PII guards 25s → limits
-(concessions #1/#2, designed-not-run arms) 15s.
+The filmed structure is `docs/DEMO-SCRIPT.md` (v5): explain first, then the live
+walk, then receipts. The walk is the golden walk and nothing shorter: the agent
+stages 3 invariants at r17 and stops → the human reviews and clicks Confirm all
+(r18) → the agent finds witness {P2,P3,P4} with provenance → the human fixes
+`managerId` in the UI (r19), dependent evidence goes STALE and a prepare over the
+old ids is REJECTED (`STALE_EVIDENCE`) → re-find {P2,P4} → the human fixes `group`
+(r20) → re-find {P4} → the human switches priority to `hris → ad → okta` (r21) →
+re-find is a clean sweep → prepare over the fresh id → GREEN; Apply untouched. A
+packet cannot go green before the third edit: after the managerId fix alone three
+violations remain (§7), so any cut that shows GREEN earlier is wrong.
 
 ## 12. Public-material rules
 
 No WindTunnel, no arXiv 2508.09171, no uniqueness claims, concessions #1/#2 stated
-before any judge asks. Judging map: Leverage = session-state loop above; Execution
-= EVAL layers all green + error recovery on camera; Impact = Okta-admin 4,000-user
-push story; Creativity = witness search + provenance + fencing as a page-authored
-contract.
+before any judge asks. Judging map (see the criteria table in
+`docs/DEMO-SCRIPT.md`): Leverage = the page-authored five-tool surface and the
+two-phase confirm; Execution = EVAL layers all green + error recovery on camera;
+Impact = any page holding an unsaved draft can author the same contract;
+Creativity = witness search + provenance + revision-bound evidence that expires.

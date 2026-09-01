@@ -1,5 +1,7 @@
 # IdentityMap Witness Implementation Plan (r2, post-review)
 
+> **Superseded in part (2026-09-01).** This r2 plan remains authority #3 for scope, but SPEC r4 and `docs/CODEX-REMEDY-PLAN.md` R1–R13 changed what shipped: Node ≥21 (not 20), curated `public/` deploy via `tools/build-public.mjs` (not publish `.`), a 12-round E2E (not 10), clean sweep as a success result (no `NO_COUNTEREXAMPLE` error), an inspection-only `window.__imw`, and the fixture-honesty rule that hris/ad may omit identity keys.
+
 > **For agentic workers:** executed by the Ralph loop in `RALPH.md` (user-prescribed
 > executor). One step per iteration where steps are heavy; a whole task per iteration
 > where light. Every `- [ ]` lives on its own line — check it off in this file and

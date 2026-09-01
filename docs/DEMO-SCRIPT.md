@@ -52,10 +52,10 @@ Read this once and the script below needs no other context.
   switches priority from **ad → hris → okta** to **hris → ad → okta** → r21,
   all evidence stales → re-find → clean sweep, packet prepared GREEN. Staging
   and find calls never change the revision; only human confirm/edits do.
-- After Confirm all, page focus lands on the **Copy prompt 2** button on its
-  own — no mouse hunting on camera.
-- Terminal receipts that exist and can be filmed: `node tools/verify.mjs` ends
-  in `STATUS CODE_COMPLETE`; `node eval/run.mjs` ends in `RESULT: PASS`;
+- After Confirm all, page focus lands on the **Copy prompt 2 — after Confirm all**
+  button on its own — no mouse hunting on camera.
+- Terminal receipts that exist and can be filmed: the last line of
+  `node tools/verify.mjs` begins with `STATUS CODE_COMPLETE`; `node eval/run.mjs` ends in `RESULT: PASS`;
   `npm test` reports 281 passing; the e2e writes a 12-round trace file.
 - A real platform constraint shaped the design: a pending WebMCP tool call dies
   after roughly 22 seconds, so human approval cannot happen inside a tool call.
@@ -125,10 +125,10 @@ D1 — the handshake (0:52–1:14)
    and then stop."
 5. "The rules come back as pending cards: exact text, a version, a
    fingerprint. But look at the badge — nothing changed. The agent can
-   propose. Only my click makes them real."
+   propose. No tool can turn them on — a click on the page does. Mine."
 6. (include only if the cut runs short) "It couldn't wait for my click inside
-   a tool call anyway — those die in twenty seconds. So waiting became page
-   state."
+   a tool call anyway — those die in about twenty-two seconds. So waiting became
+   page state."
 
 D2 — the proof (1:14–1:38)
 - ACTION: click **Copy prompt 2 — after Confirm all** (focus is already on
@@ -172,7 +172,7 @@ D4 — finish clean (2:00–2:20)
     Chrome, and a write oracle on every single call."
 11. (protected — never cut) "Two honest notes: draft preview isn't a new
     idea, and another agent living in this page could run the same engine.
-    What's new is the contract."
+    What we add is the contract."
 12. "That's WebMCP's point — the page knows the stakes, so the page sets the
     rules. Any site with a draft can do this. IdentityMap Witness finds the
     smallest set of synthetic people proving every violated rule on an
@@ -209,7 +209,7 @@ Line 11 is never cut.
 |---|---|---|
 | 0–4s | Open at r17 with the consent gate visible. Click **Copy prompt 1 — setup** and paste it into ChatGPT. | “This draft has not been saved. The page exposes a safety workflow, not a save button.” |
 | 5–8s | The agent reads, stages three rules, and stops. Show the complete pending-rule cards, version, content fingerprint, and unchanged r17. | “The agent can propose the rules, but it cannot put them in force.” |
-| 9s | The human visibly reviews the cards and clicks **Confirm all**; the badge becomes r18. | “Only my click confirms exactly what is on screen.” |
+| 9s | The human visibly reviews the cards and clicks **Confirm all**; the badge becomes r18. | “No tool can confirm — my click on the page does, on exactly what is on screen.” |
 | 10–15s | Click **Copy prompt 2 — after Confirm all**, paste it, and cut to the returned minimal witness `{P2, P3, P4}` and four matrix rows. | “Three synthetic people prove every violated rule in this unsaved draft.” |
 | 16–21s | Open one provenance row, then change managerId through the real grid input; r19 and the STALE banner appear. | “I edit one dependency. The evidence that relied on it dies immediately.” |
 | 22–26s | The agent re-reads at r19 and re-finds the smaller `{P2, P4}` witness before suggesting the next edit. | “The next decision starts from the current draft, not the dead proof.” |

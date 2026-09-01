@@ -1,5 +1,7 @@
 # RALPH.md — the loop that builds this repo (r2, post-review)
 
+> **Note (2026-09-01):** deploy is the curated `public/` build (`render.yaml` + `tools/build-public.mjs`), and the K5 evidence contract now also requires `pendingConfirmationObserved` and `humanConfirmAllObserved` (`tools/verify-evidence.mjs`, `docs/HUMAN-EVAL-PROTOCOL.md`).
+
 Executor: the `ralph-loop` Claude Code plugin. Same prompt each iteration; memory =
 plan checkboxes + PROGRESS.md + git log. r2 changes: single HALT promise for both
 endings (review finding: an ABORT promise the plugin never matches keeps looping),

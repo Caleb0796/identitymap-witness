@@ -17,8 +17,8 @@ keeps control.
 
 ### Thumbnail
 
-Use `docs/assets/devpost/thumbnail.png`: a 3:2 crop of the live minimal-witness
-state with `modelContext: present`, `tools: 5/5 registered`, and the
+Use `docs/assets/devpost/thumbnail.png` (the same 3:2 image as `02-witness.png`):
+the live minimal-witness state with `modelContext: present`, `tools: 5/5 registered`, and the
 counterexample matrix visible.
 
 ## Project details
@@ -59,8 +59,9 @@ The page and the agent work as a team:
 5. The edit marks dependent evidence **STALE**. The agent must test the new
    revision before it can prepare a **GREEN** review packet.
 
-The agent never receives a Save or Apply tool. **Apply mapping** remains an
-ordinary page control outside the WebMCP surface and is not used in the demo.
+The agent never receives a Save or Apply tool. **Apply mapping (manual page
+control)** remains an ordinary page control outside the WebMCP surface and is not
+used in the demo.
 
 ## Why WebMCP
 
@@ -89,8 +90,9 @@ still valid.
 
 The suite contains 281 passing tests. Chrome 152 runs three fresh-session
 registration checks and a 12-round trace using real DOM edits and WebMCP calls. A
-hand-audited oracle confirms that `{P2, P3, P4}` is the first minimal witness,
-covering all four seeded defect classes.
+hand-audited oracle confirms that the first find returns `{P2, P3, P4}` — one of
+two audited size-3 minimal sets — with four violation rows that together cover
+all four seeded defect classes.
 
 ## Challenges we ran into
 
@@ -111,7 +113,8 @@ The demo uses eight synthetic personas, tab-local state, and an exhaustive searc
 sized for this fixture. No real identity provider or save operation is connected.
 Unsaved-draft preview is not new by itself, and another page-local agent could run
 the same engine. The contribution is the page-authored safety contract and the
-lifecycle that makes old proof expire.
+lifecycle that makes old proof expire. The Browser-Use and Full-CDP comparison
+arms are designed, not run, so no comparative result is claimed.
 
 Next, we would connect a real provider behind the same redaction boundary, test
 larger consented datasets, persist review history, and use signed audit receipts
@@ -126,7 +129,8 @@ where cross-session trust is required.
 3. Review the three pending rule cards and click **Confirm all**; then use
    **Copy prompt 2 — after Confirm all** and send it.
 4. Follow the suggested edits. Watch each change make old evidence **STALE**, then
-   finish with a fresh **GREEN** packet. Do not click **Apply mapping**.
+   finish with a fresh **GREEN** packet. Do not click **Apply mapping (manual page
+   control)**.
 
 ### Built with
 
@@ -143,8 +147,8 @@ Upload these four 3:2 English screenshots in order:
 
 1. `docs/assets/devpost/01-confirmation.png` — `A human reviews three pending
    safety rules before confirming them.`
-2. `docs/assets/devpost/02-witness.png` — `The minimal witness exposes every
-   violated rule with three synthetic users.`
+2. `docs/assets/devpost/02-witness.png` — `The minimal witness: three synthetic
+   users, four violation rows, every broken rule exposed.`
 3. `docs/assets/devpost/03-stale.png` — `A relevant page edit immediately marks
    the previous evidence STALE.`
 4. `docs/assets/devpost/04-green.png` — `Fresh checks produce a revision-bound
@@ -189,10 +193,11 @@ No credentials are required. The live site uses synthetic data only.
 4. Click **Copy prompt 2 — after Confirm all**, paste, and send it. The first
    minimal witness should be `{P2, P3, P4}`.
 5. Follow the agent's suggested page edits. Each relevant edit must show **STALE**
-   and force a fresh check. The flow ends with zero violations and a **GREEN**
-   packet at `r21`.
+   and force a fresh check. After the three suggested edits the flow ends with
+   zero violations and a **GREEN** packet (typically at `r21`).
 
-Do not click **Apply mapping**. It is a manual page control, not a WebMCP tool.
+Do not click **Apply mapping (manual page control)**. It is a page control, not a
+WebMCP tool.
 Local fallback instructions are in the public repository README.
 
 ### Public code repository
