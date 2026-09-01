@@ -1,114 +1,220 @@
-# Devpost draft — four answers
+# Devpost submission copy
+
+This file is the source of truth for the English text and media used in the
+Devpost submission. The video URL is intentionally excluded.
+
+## Project overview
+
+### Project name
+
+IdentityMap Witness
+
+### Elevator pitch
+
+Catch identity-mapping mistakes before they go live. A WebMCP agent proves every
+broken rule with the fewest test users, then rechecks every edit while a human
+keeps control.
+
+### Thumbnail
+
+Use `docs/assets/devpost/thumbnail.png`: a 3:2 crop of the live minimal-witness
+state with `modelContext: present`, `tools: 5/5 registered`, and the
+counterexample matrix visible.
+
+## Project details
+
+### About the project
+
+## Inspiration
+
+Identity teams combine records from Active Directory, an HR system, and an
+identity provider such as Okta before those profiles drive access. The merge rules
+often sit in an administrator's browser as an unsaved draft. A case-sensitive
+check can put a contractor in the employees group, a missing manager can become an
+empty string instead of `null`, or stale directory data can override HR.
+
+Those mistakes are easy to miss without the right edge cases. An AI agent could
+help, but unrestricted UI control creates another risk: it may guess what a field
+means, rely on an older draft, or act before a person reviews the evidence.
 
 ## What it does
 
-Two concessions come first. Unsaved-draft preview is already a first-party product
-pattern, and another page-local agent with the same state and rules could run the
-same deterministic engine. IdentityMap Witness therefore does not claim uniqueness
-or that another integration is incapable of this work.
+Two things up front: unsaved-draft preview already exists as a first-party product
+pattern, and another page-local agent with the same state and rules could run this
+same engine. What this entry adds is the page-authored safety contract and an
+evidence lifecycle that makes old proof expire.
 
-IdentityMap Witness demonstrates a narrower contribution: a page-authored safety
-workflow for agent help on a dirty profile-mapping draft. An agent stages three
-business invariants for review; a human visibly confirms them. The agent then uses
-five least-privilege WebMCP tools to inspect the current draft and exhaustively find
-the smallest set of synthetic personas covering every violated rule, show redacted
-field-level provenance, preview fixes without changing state, and prepare a review
-packet only from fresh evidence. Any relevant human edit invalidates the old proof.
-The agent must re-read and re-find at the new revision; Apply remains a manual page
-control and is not exposed as a WebMCP tool.
+IdentityMap Witness reviews an identity-mapping draft before anything is saved. A
+**witness** is the smallest set of synthetic users needed to expose every safety
+rule the draft currently breaks.
 
-The two-copy judge path makes that authority boundary visible. Prompt 1 stops with
-the rules staged as pending at r17. A human reviews the exact canonical content and
-clicks the version-bound Confirm all control, which advances to r18. Prompt 2 begins
-by re-reading the confirmed session, then requires a fresh find after every human
-edit before a green packet can be prepared.
+The page and the agent work as a team:
 
-IdentityMap Witness finds the smallest set of synthetic people proving every violated rule on an unsaved draft — and the proof dies when you edit what it depended on.
+1. The agent reads the exact unsaved draft and its revision.
+2. The agent stages three safety rules, but they remain pending until a person
+   reviews the cards and clicks **Confirm all**.
+3. It finds the fewest synthetic users that demonstrate every violation and shows
+   which source value won, which lost, and why.
+4. It previews a redacted fix; the person makes the actual page edit.
+5. The edit marks dependent evidence **STALE**. The agent must test the new
+   revision before it can prepare a **GREEN** review packet.
+
+The agent never receives a Save or Apply tool. **Apply mapping** remains an
+ordinary page control outside the WebMCP surface and is not used in the demo.
+
+## Why WebMCP
+
+The page is the source of truth: it owns the live draft, understands its fields
+and rules, knows the revision, and defines the allowed operations. WebMCP exposes
+that knowledge through five structured, least-privilege tools instead of making an
+agent infer semantics from labels and DOM layout.
+
+The tools return redacted, revision-bound evidence and reject calls against old
+state. A person and an agent can therefore reason about data that has not reached
+a server while confirmation and editing remain visibly human-controlled. A generic
+browser agent could inspect the page, but the page-authored contract makes the
+workflow reviewable and resistant to stale conclusions.
 
 ## How we built it
 
-The project uses dependency-free Node 21+ and vanilla ES modules. One isomorphic
-engine implements the expression subset, value and candidate provenance,
-invariant checks, and exhaustive minimal-witness search for the page, tests, and
-evaluation. Strict tool schemas reject extra or malformed input. Staging produces a
-canonical pending object; confirmation occurs only through the version-bound page
-control for that exact content. All five tools are failure-atomic, payloads are
-capped at 1,500 characters, and evidence and packets are bound to the dependencies,
-revision, and fresh ids from which they were produced.
+The application uses vanilla JavaScript, ES modules, and Node 21+. Five
+`document.modelContext` tools read the session, stage rules, find a minimal
+counterexample set, preview a patch, and prepare the review packet. One
+deterministic engine powers the browser, tests, and evaluation.
 
-The Chrome 152 relay opens a fresh user-data directory with WebMCP enabled. Three
-cold registration sessions prove a completed five-tool round trip. A 12-round E2E
-trace drives real DOM events for confirmation, expression edits, group edits, and
-priority changes while checking stale rejection, revision recovery, hostile text,
-invalid-input atomicity, packet coverage, and a final clean sweep. The hand-derived
-oracle is marked `audited: true` and bound to commit `a575653` with an
-`Oracle-Audited: yes` trailer. The latest local eval report completed all three
-layers at exit 0, recovered all four seeded defect classes with an audited size-3
-minimal witness, and recorded zero write-oracle, failed-state-hash, and PII-canary
-failures.
+Strict schemas reject extra or malformed input. Failed tool calls leave the draft
+unchanged. Outputs are size-limited and redact identity-bearing fields, while each
+evidence record keeps the revision and dependencies needed to decide whether it is
+still valid.
+
+The suite contains 281 passing tests. Chrome 152 runs three fresh-session
+registration checks and a 12-round trace using real DOM edits and WebMCP calls. A
+hand-audited oracle confirms that `{P2, P3, P4}` is the first minimal witness,
+covering all four seeded defect classes.
 
 ## Challenges we ran into
 
-The hardest part was making the evaluation say only what the evidence supports. An
-early comparison disadvantaged the API arm by withholding the unsaved inputs. We
-replaced it with an explicitly by-construction persisted-state ablation and stopped
-calling it a competitive benchmark. Browser-Use and Full-CDP remain documented
-designs rather than simulated results.
+The hardest problem was preventing a correct answer from becoming dangerous after
+the draft changed. Expressions, source priority, and confirmed rules can all
+invalidate earlier reasoning, so evidence is bound to its exact dependencies.
+Relevant edits strike through old rows and block the old packet.
 
-Platform behavior also forced the interaction design. A pending WebMCP call dies
-at about 22 seconds, so confirmation cannot be a long-running tool call: staging
-returns immediately, a human confirms on the page, and the next prompt makes the
-agent re-read. Adversarial tests then exposed the less obvious edges—detached stale
-Confirm controls, wrong revisions, stale packet ids, hidden allocator drift,
-hostile rule text, invalid expressions, and present-but-empty source values. Each
-became an executable contract. The remaining model-quality evidence is deliberately
-human-run and is not claimed complete until its six pixel-backed artifacts exist.
+Human approval also could not wait inside one long-running tool call: pending calls
+ended after roughly 22 seconds in testing. The tool now stages rule cards and
+returns; a person confirms them; the next agent turn re-reads the state. Stale
+buttons, malformed inputs, hostile text, and empty source values became executable
+failure cases.
 
 ## What's next
 
-The current limits are explicit:
+The demo uses eight synthetic personas, tab-local state, and an exhaustive search
+sized for this fixture. No real identity provider or save operation is connected.
+Unsaved-draft preview is not new by itself, and another page-local agent could run
+the same engine. The contribution is the page-authored safety contract and the
+lifecycle that makes old proof expire.
 
-1. The eight personas and all identity values are synthetic.
-2. Draft state and evidence are tab-local rather than durable across sessions.
-3. Exhaustive witness search is demonstrated only at the small fixture scale.
-4. No real identity provider, admin console, or save operation is connected.
-5. FNV-1a fingerprints identify canonical visible content but are not
-   cryptographic signatures.
-6. Browser-Use and Full-CDP comparative arms are designed, not run.
+Next, we would connect a real provider behind the same redaction boundary, test
+larger consented datasets, persist review history, and use signed audit receipts
+where cross-session trust is required.
 
-Next steps are to run those external comparison arms, evaluate search strategies on
-larger consented datasets, integrate a real identity provider behind the same
-redaction boundary, and replace local content fingerprints with signed audit
-receipts where cross-session trust is required. The immediate submission work is
-more modest: execute the three fresh human model-evaluation scenarios, record the
-remote demo, and publish only the evidence those runs actually produce.
+## Try it
 
-## Testing instructions
+1. Open `https://identitymap-witness.onrender.com` in ChatGPT's in-app browser and
+   enable site tools for the page.
+2. Pass the visible consent gate, use **Copy prompt 1 — setup**, paste the prompt
+   into chat, and send it.
+3. Review the three pending rule cards and click **Confirm all**; then use
+   **Copy prompt 2 — after Confirm all** and send it.
+4. Follow the suggested edits. Watch each change make old evidence **STALE**, then
+   finish with a fresh **GREEN** packet. Do not click **Apply mapping**.
 
-**ChatGPT built-in browser:** Open the built-in browser, enable site tools for the
-site, navigate to the full `https://identitymap-witness.onrender.com` URL, and pass
-the visible consent gate. Use **Copy prompt 1 — setup**, send it, review the pending
-cards, and click **Confirm all**. Then use **Copy prompt 2 — after Confirm all** and
-send it.
+### Built with
 
-**Local:** Clone the repository, run the tests, and start the local server:
+`webmcp, javascript, node.js, chrome, html5, css3, render, chatgpt`
 
-```bash
-git clone https://github.com/Caleb0796/identitymap-witness.git
-cd identitymap-witness
-npm test
-node harness/serve.mjs
-```
+### Try it out links
 
-Launch Chrome 152 in a fresh profile with WebMCP enabled:
+1. `https://identitymap-witness.onrender.com`
+2. `https://github.com/Caleb0796/identitymap-witness`
 
-```bash
-imw_profile_dir="$(mktemp -d)"
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --user-data-dir="$imw_profile_dir" \
-  --enable-features=WebMCP \
-  http://127.0.0.1:4173
-```
+### Image gallery
 
-Follow the same two-prompt flow locally. **Apply mapping (manual page control)** is
-not exposed to the agent as a WebMCP tool and is never clicked in either path.
+Upload these four 3:2 English screenshots in order:
+
+1. `docs/assets/devpost/01-confirmation.png` — `A human reviews three pending
+   safety rules before confirming them.`
+2. `docs/assets/devpost/02-witness.png` — `The minimal witness exposes every
+   violated rule with three synthetic users.`
+3. `docs/assets/devpost/03-stale.png` — `A relevant page edit immediately marks
+   the previous evidence STALE.`
+4. `docs/assets/devpost/04-green.png` — `Fresh checks produce a revision-bound
+   GREEN review packet.`
+
+## Additional info
+
+### Submitter Type
+
+Team of Individuals
+
+### Countries of residence
+
+United States
+
+### Organization name
+
+Leave blank.
+
+### App Status
+
+New
+
+### Existing-project explanation
+
+Leave blank.
+
+### Live URL
+
+`https://identitymap-witness.onrender.com`
+
+### Testing instructions
+
+No credentials are required. The live site uses synthetic data only.
+
+1. Open the live URL in ChatGPT's in-app browser and enable site tools. Pass the
+   visible consent gate. Confirm the header shows `modelContext: present`,
+   `tools: 5/5 registered`, and `r17`.
+2. Click **Copy prompt 1 — setup**, paste the prompt into chat, and send it. The
+   agent must stage three rules and stop while the revision remains `r17`.
+3. Review the pending cards and click **Confirm all**. The revision becomes `r18`.
+4. Click **Copy prompt 2 — after Confirm all**, paste, and send it. The first
+   minimal witness should be `{P2, P3, P4}`.
+5. Follow the agent's suggested page edits. Each relevant edit must show **STALE**
+   and force a fresh check. The flow ends with zero violations and a **GREEN**
+   packet at `r21`.
+
+Do not click **Apply mapping**. It is a manual page control, not a WebMCP tool.
+Local fallback instructions are in the public repository README.
+
+### Public code repository
+
+`https://github.com/Caleb0796/identitymap-witness`
+
+### Agents or clients tested
+
+ChatGPT's in-app browser for manual tool registration and stale-evidence checks;
+Google Chrome 152 with WebMCP enabled for three fresh-session registration checks
+and a 12-round DOM and tool-call test harness.
+
+### AI tools used
+
+Claude Code and OpenAI Codex for planning, implementation, adversarial review,
+and test and evaluation tooling; ChatGPT's in-app browser for manual WebMCP
+testing.
+
+### Learning derived
+
+Significant
+
+### Career value
+
+Yes

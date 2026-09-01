@@ -1,16 +1,20 @@
 # IdentityMap Witness
 
-Two concessions come first: unsaved-draft preview is already a first-party product
-pattern, and another page-local agent with the same state and rules could run the
-same deterministic engine.
+Identity teams merge employee records from Active Directory, HR systems, and
+identity providers before those profiles drive access. A subtle mapping mistake can
+give a contractor employee permissions, erase a manager relationship, or let stale
+directory data override HR.
 
-> IdentityMap Witness finds the smallest set of synthetic people proving every violated rule on an unsaved draft — and the proof dies when you edit what it depended on.
+> Catch identity-mapping mistakes before they go live. A WebMCP agent proves every broken rule with the fewest test users, then rechecks every edit while a human keeps control.
 
-This WebMCP Challenge entry is a profile-mapping workbench. A human defines the
-business invariants; five page-authored `document.modelContext` tools let an agent
-inspect the unsaved draft, find an exhaustive minimal counterexample set, preview
-redacted fixes, and prepare a revision-bound review packet. No WebMCP tool can save
-or apply changes.
+IdentityMap Witness is a WebMCP-powered workbench for reviewing that unsaved draft.
+A human confirms the safety rules; five page-authored `document.modelContext` tools
+let an agent inspect the current revision, find the smallest synthetic test set
+that exposes every violation, explain source provenance, preview redacted fixes,
+and prepare a review packet only from fresh evidence. Every relevant edit makes
+dependent proof stale. No WebMCP tool can save or apply changes.
+
+![IdentityMap Witness minimal counterexample workflow](docs/assets/devpost/02-witness.png)
 
 **Live demo:** https://identitymap-witness.onrender.com
 
@@ -105,8 +109,10 @@ node eval/run.mjs               # thresholds, oracle binding, write oracle
 
 ## Scope and evidence honesty
 
-The evaluated contribution is the page-authored safety workflow and its evidence
-lifecycle, not uniqueness or an impossibility result.
+Unsaved-draft preview is already a first-party product pattern, and another
+page-local agent with the same state and rules could run the same deterministic
+engine. The evaluated contribution is the page-authored safety workflow and its
+evidence lifecycle, not uniqueness or an impossibility result.
 
 The fixture has eight synthetic personas. State is tab-local; the witness search is
 exhaustive only at this fixture's scale; no real identity provider or save path is
