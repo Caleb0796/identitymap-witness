@@ -39,10 +39,12 @@ export const GOLDEN_STATE = {
 const failure = (code, extra = {}) => ({ ok: false, error: { code, ...extra } });
 const mismatch = (s) => failure("REVISION_MISMATCH", { currentRevision: s.revision });
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
-const noInvariants = (s) => failure("NO_INVARIANTS", {
-  reason: s.pending
-    ? "no confirmed invariants — pending rules await confirmation by the human"
-    : "no pinned invariants — ask the human to pin business rules first",
+const noInvariants = (s, emptySelection = false) => failure("NO_INVARIANTS", {
+  reason: emptySelection
+    ? "no invariants selected — omit invariantIds to check all confirmed rules, or pass confirmed ids returned by read_mapping_session"
+    : s.pending
+      ? "no confirmed invariants — pending rules await confirmation by the human"
+      : "no confirmed invariants — call stage_mapping_invariants with the complete rule set, ask the human to Confirm all, then call read_mapping_session",
 });
 
 const HANDLERS = {
@@ -86,7 +88,8 @@ const HANDLERS = {
         return failure("BAD_RULE", { reason: `unknown invariant id ${id}` });
       pins = s.pins.filter((p) => args.invariantIds.includes(p.id));
     }
-    if (pins.length === 0) return noInvariants(s);
+    if (pins.length === 0)
+      return noInvariants(s, s.pins.length > 0 && args.invariantIds?.length === 0);
     const checkedInvariantIds = pins.map((p) => p.id);
     const confirmedInvariantIds = new Set(s.pins.map((p) => p.id));
     const checkedInvariantSet = new Set(checkedInvariantIds);
@@ -168,7 +171,9 @@ const HANDLERS = {
     if (args.expectedRevision !== s.revision) return mismatch(s);
     if (s.pins.length === 0) return noInvariants(s);
     const ids = args.evidenceIds ?? [];
-    if (ids.length === 0) return failure("NO_EVIDENCE");
+    if (ids.length === 0) return failure("NO_EVIDENCE", {
+      reason: "no evidence ids supplied — run find_mapping_counterexample at the current revision and pass its evidenceIds",
+    });
     const staleIds = ids.filter((id) => !hasOwn(s.evidence, id) || s.evidence[id].stale);
     if (staleIds.length) return failure("STALE_EVIDENCE", { staleIds });
     const evidences = ids.map((id) => s.evidence[id]);
@@ -200,59 +205,83 @@ const HANDLERS = {
 
 export const TOOLS = [
   { name: "read_mapping_session",
-    description: "Report the current UNSAVED mapping session: revision, source priority order, per-field draft expressions, confirmed and pending invariant ids, pending version, persona pool size. Read-only; returns no profile values.",
+    description: "Read the current unsaved mapping session. Returns the revision, source priority, draft field expressions, confirmed pin ids, pending rule ids/version, and persona count; never returns profile values. Use the returned revision as expectedRevision for every other tool, and re-read after human confirmation or edits.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, untrustedContentHint: true } },
   { name: "stage_mapping_invariants",
-    description: "Stage a full proposed set of business invariants for visible human review (never persisted). Requires expectedRevision; returns immediately without changing confirmed pins or revision.",
+    description: "Stage the complete proposed invariant set for visible human review. expectedRevision must match the current session. Staging does not confirm, persist, or change revision; later confirmation replaces the pinned set. Returns pending ids/version/digest. On success, stop for the human to choose Confirm all or Discard, then re-read.",
     inputSchema: { type: "object", properties: {
-      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION },
-      invariants: { type: "array", minItems: 1, maxItems: MAX_INVARIANTS, items: { oneOf: [
+      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION,
+        description: "Exact revision returned by the latest read_mapping_session; REVISION_MISMATCH reports the current revision when stale." },
+      invariants: { type: "array", minItems: 1, maxItems: MAX_INVARIANTS,
+        description: "Complete 1–8 rule proposal. Human confirmation replaces the pinned set; staging alone does not activate it.",
+        items: { oneOf: [
         { type: "object", properties: {
-          id: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS },
-          type: { type: "string", enum: ["forbidden_group"] },
-          personaCategory: { type: "string", minLength: 1, maxLength: MAX_RULE_TEXT_CHARS },
-          group: { type: "string", minLength: 1, maxLength: MAX_RULE_TEXT_CHARS },
+          id: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS,
+            description: "Optional stable rule id; omitted ids become pin-N. Resolved ids must be unique." },
+          type: { type: "string", enum: ["forbidden_group"],
+            description: "Rule semantics; use the exact branch whose required properties match this value." },
+          personaCategory: { type: "string", minLength: 1, maxLength: MAX_RULE_TEXT_CHARS,
+            description: "Synthetic persona category to which the forbidden-group rule applies, compared case-insensitively." },
+          group: { type: "string", minLength: 1, maxLength: MAX_RULE_TEXT_CHARS,
+            description: "Resolved group forbidden for that persona category, compared case-insensitively." },
         }, required: ["type", "personaCategory", "group"], additionalProperties: false },
         { type: "object", properties: {
-          id: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS },
-          type: { type: "string", enum: ["null_if_missing"] },
-          field: { type: "string", enum: OUTPUT_FIELDS },
-          dependsOn: { type: "string", minLength: 1, maxLength: MAX_RULE_TEXT_CHARS },
+          id: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS,
+            description: "Optional stable rule id; omitted ids become pin-N. Resolved ids must be unique." },
+          type: { type: "string", enum: ["null_if_missing"],
+            description: "Rule semantics; use the exact branch whose required properties match this value." },
+          field: { type: "string", enum: OUTPUT_FIELDS,
+            description: "Target field that must remain null when dependsOn is absent from every source." },
+          dependsOn: { type: "string", minLength: 1, maxLength: MAX_RULE_TEXT_CHARS,
+            description: "Source-profile property whose absence across okta, hris, and ad triggers the null requirement." },
         }, required: ["type", "field", "dependsOn"], additionalProperties: false },
         { type: "object", properties: {
-          id: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS },
-          type: { type: "string", enum: ["source_of_truth"] },
-          field: { type: "string", enum: OUTPUT_FIELDS },
-          source: { type: "string", enum: ["okta", "hris", "ad"] },
+          id: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS,
+            description: "Optional stable rule id; omitted ids become pin-N. Resolved ids must be unique." },
+          type: { type: "string", enum: ["source_of_truth"],
+            description: "Rule semantics; use the exact branch whose required properties match this value." },
+          field: { type: "string", enum: OUTPUT_FIELDS,
+            description: "Target field whose winning provenance must be source when that source supplies a nonempty value." },
+          source: { type: "string", enum: ["okta", "hris", "ad"],
+            description: "Required source of truth when it supplies a nonempty value." },
         }, required: ["type", "field", "source"], additionalProperties: false },
       ] } } },
       required: ["expectedRevision", "invariants"], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true } },
   { name: "find_mapping_counterexample",
-    description: "Evaluate every synthetic persona against the UNSAVED draft and return the minimal persona set witnessing every violated pinned invariant, with value-minimized field/source details and evidence ids.",
+    description: "Evaluate all synthetic personas (eight in this fixture) against confirmed invariants at expectedRevision. Returns canonical minimum witness personaIds, every violation row, scope/fullSweep flags, and one closing evidence id; records evidence but never edits the draft. Requires a nonempty confirmed/selected set. After any human edit, re-read and re-find because old evidence becomes stale.",
     inputSchema: { type: "object", properties: {
-      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION },
+      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION,
+        description: "Exact revision returned by the latest read_mapping_session; REVISION_MISMATCH reports the current revision when stale." },
       invariantIds: { type: "array", maxItems: MAX_INVARIANT_IDS, uniqueItems: true,
+        description: "Optional confirmed-id subset. Omit to check all; an empty array checks none and returns NO_INVARIANTS.",
         items: { type: "string", minLength: 1, maxLength: MAX_INVARIANT_ID_CHARS } },
-      maxPersonas: { type: "integer", minimum: 1, maximum: 8 } },
+      maxPersonas: { type: "integer", minimum: 1, maximum: 8,
+        description: "Optional 1–8 hard cap; WITNESS_EXCEEDS_CAP reports the required minimum size." } },
       required: ["expectedRevision"], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true } },
   { name: "preview_mapping_patch",
-    description: "Preview a candidate expression fix against named personas WITHOUT editing the draft: identity-minimized before/after diffs and remaining violations. Applying edits remains a manual page control.",
+    description: "Evaluate one candidate expr for field on the named personaIds at expectedRevision without editing the draft. Returns identity-minimized diffs, remaining violations for that field within those personas, and a non-closing preview evidence id. Use persona ids returned by find_mapping_counterexample; UNKNOWN_PERSONA identifies a bad id. The human makes any edit in the page.",
     inputSchema: { type: "object", properties: {
-      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION },
-      field: { type: "string", enum: OUTPUT_FIELDS },
-      expr: { type: "string", maxLength: MAX_EXPRESSION_CHARS },
+      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION,
+        description: "Exact revision returned by the latest read_mapping_session; REVISION_MISMATCH reports the current revision when stale." },
+      field: { type: "string", enum: OUTPUT_FIELDS,
+        description: "Target draft field to simulate; the tool does not edit it." },
+      expr: { type: "string", maxLength: MAX_EXPRESSION_CHARS,
+        description: "Candidate expression to evaluate, at most 512 characters; it is never written to the draft." },
       personaIds: { type: "array", minItems: 1, maxItems: MAX_PERSONA_IDS, uniqueItems: true,
+        description: "One to eight existing synthetic ids, normally returned by find_mapping_counterexample.personaIds.",
         items: { type: "string", minLength: 1, maxLength: MAX_PERSONA_ID_CHARS } } },
       required: ["expectedRevision", "field", "expr", "personaIds"], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true } },
   { name: "prepare_mapping_review",
-    description: "Assemble a review packet from fresh evidence ids. Fails on stale evidence (the human edited since) and on any privacy-guard trip. Enables the human's plain Review button; never sends or applies anything.",
+    description: "Create a review packet at expectedRevision from evidenceIds. Empty, missing, or stale ids fail. Only current counterexample or clean-sweep evidence closes pins; preview evidence never does. Returns coverage and blockers and records a packet. A fresh packet with blockers:[] enables Apply mapping (manual page control); this tool never applies or sends anything.",
     inputSchema: { type: "object", properties: {
-      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION },
+      expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION,
+        description: "Exact revision returned by the latest read_mapping_session; REVISION_MISMATCH reports the current revision when stale." },
       evidenceIds: { type: "array", maxItems: MAX_EVIDENCE_IDS, uniqueItems: true,
+        description: "Fresh E-* ids returned by find or preview. Only counterexample and clean-sweep evidence can close pins.",
         items: { type: "string", minLength: 1, maxLength: MAX_EVIDENCE_ID_CHARS,
           pattern: "^E-[1-9]\\d*$" } } },
       required: ["expectedRevision", "evidenceIds"], additionalProperties: false },

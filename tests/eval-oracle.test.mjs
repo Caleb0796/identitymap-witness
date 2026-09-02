@@ -401,6 +401,62 @@ test("transport failures are complete and exact for every tool", () => {
   }
 });
 
+test("recovery reasons are exact for empty invariant and evidence states", () => {
+  const empty = base();
+  const pending = base();
+  pending.nextPendingVersion = 1;
+  pending.state.pending = { version: 1, digest: RULE_DIGEST, rules: [RULE] };
+  const confirmed = base();
+  confirmed.state.pins = [RULE];
+  const noConfirmedReason = "no confirmed invariants — call stage_mapping_invariants with the complete rule set, ask the human to Confirm all, then call read_mapping_session";
+  const pendingReason = "no confirmed invariants — pending rules await confirmation by the human";
+  const emptySelectionReason = "no invariants selected — omit invariantIds to check all confirmed rules, or pass confirmed ids returned by read_mapping_session";
+  const noEvidenceReason = "no evidence ids supplied — run find_mapping_counterexample at the current revision and pass its evidenceIds";
+
+  for (const valid of [
+    entry("find_mapping_counterexample", empty, empty, {
+      error: { code: "NO_INVARIANTS", reason: noConfirmedReason },
+    }, { input: { expectedRevision: 17 } }),
+    entry("prepare_mapping_review", empty, empty, {
+      error: { code: "NO_INVARIANTS", reason: noConfirmedReason },
+    }, { input: { expectedRevision: 17, evidenceIds: [] } }),
+    entry("find_mapping_counterexample", pending, pending, {
+      error: { code: "NO_INVARIANTS", reason: pendingReason },
+    }, { input: { expectedRevision: 17 } }),
+    entry("find_mapping_counterexample", confirmed, confirmed, {
+      error: { code: "NO_INVARIANTS", reason: emptySelectionReason },
+    }, { input: { expectedRevision: 17, invariantIds: [] } }),
+    entry("prepare_mapping_review", confirmed, confirmed, {
+      error: { code: "NO_EVIDENCE", reason: noEvidenceReason },
+    }, { input: { expectedRevision: 17, evidenceIds: [] } }),
+  ]) {
+    assert.deepEqual(auditTrace([valid]), {
+      failedCallHashFailures: [],
+      writeOracleFailures: [],
+    });
+  }
+
+  for (const malformed of [
+    entry("find_mapping_counterexample", empty, empty, {
+      error: { code: "NO_INVARIANTS", reason: "no pinned invariants — ask the human to pin business rules first" },
+    }, { input: { expectedRevision: 17 } }),
+    entry("find_mapping_counterexample", confirmed, confirmed, {
+      error: { code: "NO_INVARIANTS", reason: noConfirmedReason },
+    }, { input: { expectedRevision: 17, invariantIds: [] } }),
+    entry("prepare_mapping_review", confirmed, confirmed, {
+      error: { code: "NO_EVIDENCE" },
+    }, { input: { expectedRevision: 17, evidenceIds: [] } }),
+    entry("prepare_mapping_review", confirmed, confirmed, {
+      error: { code: "NO_EVIDENCE", reason: noEvidenceReason, extra: true },
+    }, { input: { expectedRevision: 17, evidenceIds: [] } }),
+  ]) {
+    const result = auditTrace([malformed]);
+    assert.ok(result.writeOracleFailures.some((failure) =>
+      /valid success or error envelope/.test(failure.reason)),
+    JSON.stringify(result.writeOracleFailures));
+  }
+});
+
 test("read success envelope must exactly describe the captured state", () => {
   const snapshot = base();
   const valid = readPayload(snapshot);

@@ -164,11 +164,41 @@ test("zero-pin and empty-evidence gates fail closed without recording derived st
       assert.equal(result.ok, false);
       assert.deepEqual(result.error, {
         code: "NO_INVARIANTS",
-        reason: "no pinned invariants — ask the human to pin business rules first",
+        reason: "no confirmed invariants — call stage_mapping_invariants with the complete rule set, ask the human to Confirm all, then call read_mapping_session",
       });
       assert.deepEqual(store.getState().evidence, {});
     });
   }
+
+  await t.test("find: empty invariantIds with confirmed pins explains selection recovery", () => {
+    const store = createStore({ ...GOLDEN_STATE, pins: PINS });
+    const result = runTool(store, personas, "find_mapping_counterexample", {
+      expectedRevision: 17,
+      invariantIds: [],
+    });
+    assert.deepEqual(result.error, {
+      code: "NO_INVARIANTS",
+      reason: "no invariants selected — omit invariantIds to check all confirmed rules, or pass confirmed ids returned by read_mapping_session",
+    });
+    assert.deepEqual(store.getState().evidence, {});
+  });
+
+  await t.test("find: pending-only state keeps the human-confirmation reason", () => {
+    const store = createStore(GOLDEN_STATE);
+    const staged = runTool(store, personas, "stage_mapping_invariants", {
+      expectedRevision: 17,
+      invariants: PINS,
+    });
+    assert.equal(staged.ok, true);
+    const result = runTool(store, personas, "find_mapping_counterexample", {
+      expectedRevision: 17,
+    });
+    assert.deepEqual(result.error, {
+      code: "NO_INVARIANTS",
+      reason: "no confirmed invariants — pending rules await confirmation by the human",
+    });
+    assert.deepEqual(store.getState().evidence, {});
+  });
 
   await t.test("prepare: zero pins takes precedence", () => {
     const store = createStore(GOLDEN_STATE);
@@ -176,7 +206,10 @@ test("zero-pin and empty-evidence gates fail closed without recording derived st
       expectedRevision: 17,
       evidenceIds: ["E-1"],
     });
-    assert.equal(result.error.code, "NO_INVARIANTS");
+    assert.deepEqual(result.error, {
+      code: "NO_INVARIANTS",
+      reason: "no confirmed invariants — call stage_mapping_invariants with the complete rule set, ask the human to Confirm all, then call read_mapping_session",
+    });
     assert.deepEqual(store.getState().packets, {});
   });
 
@@ -186,7 +219,10 @@ test("zero-pin and empty-evidence gates fail closed without recording derived st
       expectedRevision: 17,
       evidenceIds: [],
     });
-    assert.equal(result.error.code, "NO_EVIDENCE");
+    assert.deepEqual(result.error, {
+      code: "NO_EVIDENCE",
+      reason: "no evidence ids supplied — run find_mapping_counterexample at the current revision and pass its evidenceIds",
+    });
     assert.deepEqual(store.getState().packets, {});
   });
 

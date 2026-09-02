@@ -241,13 +241,16 @@ function validErrorDetails(error, entry, after) {
         && after.state.pending !== null
         && error.reason === "different rules are already awaiting human review — the human must confirm or discard them first";
     case "NO_INVARIANTS": {
-      const noEffectivePins = after.state.pins.length === 0
-        || (entry.toolName === "find_mapping_counterexample"
-          && Array.isArray(entry.input?.invariantIds)
-          && entry.input.invariantIds.length === 0);
-      const expectedReason = after.state.pending
-        ? "no confirmed invariants — pending rules await confirmation by the human"
-        : "no pinned invariants — ask the human to pin business rules first";
+      const emptySelection = after.state.pins.length > 0
+        && entry.toolName === "find_mapping_counterexample"
+        && Array.isArray(entry.input?.invariantIds)
+        && entry.input.invariantIds.length === 0;
+      const noEffectivePins = after.state.pins.length === 0 || emptySelection;
+      const expectedReason = emptySelection
+        ? "no invariants selected — omit invariantIds to check all confirmed rules, or pass confirmed ids returned by read_mapping_session"
+        : after.state.pending
+          ? "no confirmed invariants — pending rules await confirmation by the human"
+          : "no confirmed invariants — call stage_mapping_invariants with the complete rule set, ask the human to Confirm all, then call read_mapping_session";
       return reasonEnvelope && noEffectivePins && error.reason === expectedReason;
     }
     case "REVISION_MISMATCH":
@@ -269,7 +272,8 @@ function validErrorDetails(error, entry, after) {
       return same(keys, ["code", "staleIds"])
         && stringArray(error.staleIds) && error.staleIds.length > 0;
     case "NO_EVIDENCE":
-      return same(keys, ["code"])
+      return reasonEnvelope
+        && error.reason === "no evidence ids supplied — run find_mapping_counterexample at the current revision and pass its evidenceIds"
         && after.state.pins.length > 0
         && Array.isArray(entry.input?.evidenceIds)
         && entry.input.evidenceIds.length === 0;
