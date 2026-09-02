@@ -60,7 +60,10 @@ test("app registration uses method feature detection and a non-BFCache page life
   assert.match(source, /typeof document\.modelContext\?\.registerTool === "function"/);
   assert.match(source, /const lifecycle = new AbortController\(\)/);
   assert.match(source, /if \(!event\.persisted\) lifecycle\.abort\(\)/);
-  assert.match(source, /document\.modelContext\.registerTool\(definition, options\)/);
+  assert.match(
+    source,
+    /document\.modelContext\.registerTool\(\{\s*name: definition\.name,\s*description: definition\.description,\s*inputSchema: definition\.inputSchema,\s*execute: definition\.execute,\s*annotations: definition\.annotations,\s*\}, options\)/,
+  );
 });
 
 test("registration exposes loading, partial-failure, and success states", async (t) => {

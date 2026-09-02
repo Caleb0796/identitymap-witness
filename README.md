@@ -67,6 +67,25 @@ the demo path.
 | `preview_mapping_patch` | Preview a redacted patch without mutating the draft. |
 | `prepare_mapping_review` | Build a packet from fresh evidence; coverage and blockers show whether it is complete, and only a fresh blocker-free packet turns GREEN. |
 
+## How WebMCP is wired
+
+The production registration leaf is [`app.js:534–540`](app.js#L534-L540):
+
+```js
+    (definition, options) => document.modelContext.registerTool({
+      name: definition.name,
+      description: definition.description,
+      inputSchema: definition.inputSchema,
+      execute: definition.execute,
+      annotations: definition.annotations,
+    }, options),
+```
+
+When WebMCP and the demo data are available, the page attempts each of the five
+registrations once during initialization; state changes do not re-register them
+because their `execute` closures read the current store, and relevant edits make
+dependent evidence stale.
+
 ## Run locally
 
 Node 21 or newer is required because the Chrome relay uses the native WebSocket

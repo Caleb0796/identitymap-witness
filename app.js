@@ -531,7 +531,13 @@ let toolSnapshotBefore = null;
 if (present) {
   const registration = await registerToolDefinitions(
     TOOLS,
-    (definition, options) => document.modelContext.registerTool(definition, options),
+    (definition, options) => document.modelContext.registerTool({
+      name: definition.name,
+      description: definition.description,
+      inputSchema: definition.inputSchema,
+      execute: definition.execute,
+      annotations: definition.annotations,
+    }, options),
     (tool) => {
       const executeTool = createToolExecutor(store, personas, tool.name, (result) => {
         if (result.ok && tool.name === "find_mapping_counterexample") {
