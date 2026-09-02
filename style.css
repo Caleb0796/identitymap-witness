@@ -52,6 +52,7 @@ td input[aria-invalid="true"] { border-color: #aa3434; outline: 2px solid #f3b8b
 .matrix-select:focus-visible { outline: 3px solid #1459d9; outline-offset: 2px; }
 #matrix td.viol { background: #fbe2df; color: #7c2a2a; font-weight: 600; }
 #matrix tbody tr.stale td { opacity: .4; text-decoration: line-through; }
+#witness-summary.stale { opacity: .55; text-decoration: line-through; }
 #matrix tbody tr.selected td { outline: 2px solid #1459d9; outline-offset: -2px; }
 .stale-banner { margin: 0 0 .5rem; padding: .5rem .7rem; border-left: 4px solid #aa3434; background: #fbe2df; color: #7c2a2a; font-size: .8rem; font-weight: 600; border-radius: 0 6px 6px 0; }
 .pin-chip { display: inline-flex; align-items: center; gap: .45rem; margin: 0 .35rem .35rem 0; padding: .25rem .6rem; border: 1px solid #cfd9ee; background: #e4edff; border-radius: 999px; font-size: .76rem; }

@@ -763,6 +763,17 @@ async function e2e(baseUrl) {
     assertEq(manager4.active, true, "round4 managerId edit preserves input focus");
     const e1stale = await s.evalJs(`window.__imw.state().evidence[${JSON.stringify(E1[0])}].stale`);
     assertEq(e1stale, true, "round4 E1 stale");
+    assertEq(await s.evalJs('!document.querySelector("#stale-banner").hidden'), true,
+      "round4 managerId edit exposes stale banner");
+    assertEq(await s.evalJs(`({
+      hidden: document.querySelector("#witness-summary").hidden,
+      stale: document.querySelector("#witness-summary").classList.contains("stale"),
+      text: document.querySelector("#witness-summary").textContent,
+    })`), {
+      hidden: false,
+      stale: true,
+      text: "Minimal witness (3): P2, P3, P4 · 4 violation rows, including alternate witnesses · STALE",
+    }, "round4 stale witness summary");
     // 5 prepare over stale E1 MUST fail
     const r5 = await call(5, "prepare_mapping_review", { expectedRevision: 19, evidenceIds: E1 });
     assertEq(r5.p.error.code, "STALE_EVIDENCE", "round5 code");
@@ -774,9 +785,11 @@ async function e2e(baseUrl) {
     assertEq(r6.p.evidenceIds, ["E-2"], "round6 evidence id");
     assertEq(await s.evalJs(`({
       hidden: document.querySelector("#witness-summary").hidden,
+      stale: document.querySelector("#witness-summary").classList.contains("stale"),
       text: document.querySelector("#witness-summary").textContent,
     })`), {
       hidden: false,
+      stale: false,
       text: "Minimal witness (2): P2, P4 · 3 violation rows, including alternate witnesses",
     }, "round6 witness summary");
     // 7 preview the group fix over P2 — draft untouched

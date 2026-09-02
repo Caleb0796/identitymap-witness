@@ -56,6 +56,12 @@ test("page guidance identifies the human-only controls and evidence boundaries",
     "Text that does not parse stays local to its box and is not part of the shown revision.",
   ]) assert.ok(html.includes(text), `missing page guidance: ${text}`);
   assert.ok(app.includes("GREEN — every confirmed rule covered by fresh evidence"));
+  const witnessSummaryStart = app.indexOf("const hasWitness");
+  const witnessSummaryRender = app.slice(witnessSummaryStart,
+    app.indexOf("allClear.hidden", witnessSummaryStart));
+  assert.ok(witnessSummaryRender.includes('witnessSummary.classList.toggle("stale", Boolean(hasWitness && findStale));'));
+  assert.ok(witnessSummaryRender.includes('${findStale ? " · STALE" : ""}'));
+  assert.match(style, /#witness-summary\.stale \{ opacity: \.55; text-decoration: line-through; \}/);
   assert.match(style, /\.matrix-select \{[^}]*text-decoration: underline dotted;[^}]*text-underline-offset: 2px;[^}]*color: #1459d9;[^}]*font-weight: 600;/);
   assert.match(style, /\.matrix-select:focus-visible \{ outline: 3px solid #1459d9; outline-offset: 2px; \}/);
 });

@@ -383,8 +383,9 @@ function render() {
   const sweepStillFull = sweep?.fullSweep && sweep.confirmedInvariantCount === s.pins.length;
   const hasWitness = Boolean(find && !find.cleanSweep && find.personaIds.length > 0);
   witnessSummary.hidden = !hasWitness;
+  witnessSummary.classList.toggle("stale", Boolean(hasWitness && findStale));
   witnessSummary.textContent = hasWitness
-    ? `Minimal witness (${find.personaIds.length}): ${find.personaIds.join(", ")} · ${find.violations.length} violation rows, including alternate witnesses`
+    ? `Minimal witness (${find.personaIds.length}): ${find.personaIds.join(", ")} · ${find.violations.length} violation rows, including alternate witnesses${findStale ? " · STALE" : ""}`
     : "";
   allClear.hidden = !(sweep?.cleanSweep && !sweepStale);
   if (sweep?.cleanSweep && !sweepStale) {
