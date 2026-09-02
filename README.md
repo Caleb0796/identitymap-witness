@@ -40,7 +40,7 @@ rule on an unsaved draft — and the proof dies when you edit what it depended o
   [`docs/EVIDENCE-CHECKLIST.md`](docs/EVIDENCE-CHECKLIST.md)), so these links
   resolve for judges; committing them earlier would bind them to a superseded
   commit.
-- Final `npm test` count: **281 tests, 281 passed, 0 failed, 0 skipped**. No
+- Final `npm test` count: **292 tests, 292 passed, 0 failed, 0 skipped**. No
   coverage percentage is claimed.
 - The remaining entry work is human-run model evaluation, final video capture,
   public-repository verification, and submission. See

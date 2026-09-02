@@ -56,7 +56,7 @@ Read this once and the script below needs no other context.
   button on its own — no mouse hunting on camera.
 - Terminal receipts that exist and can be filmed: the last line of
   `node tools/verify.mjs` begins with `STATUS CODE_COMPLETE`; `node eval/run.mjs` ends in `RESULT: PASS`;
-  `npm test` reports 281 passing; the e2e writes a 12-round trace file.
+  `npm test` reports 292 passing; the e2e writes a 12-round trace file.
 - A real platform constraint shaped the design: a pending WebMCP tool call dies
   after roughly 22 seconds,
   observed in our own ChatGPT in-app-browser testing on 2026-08-29; the measurement is not part of this repository's automated evidence.

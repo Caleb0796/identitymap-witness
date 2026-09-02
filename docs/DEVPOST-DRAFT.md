@@ -85,7 +85,7 @@ deterministic engine powers the browser, tests, and evaluation.
 
 Strict schemas reject extra or malformed input. Failed tool calls leave the committed draft unchanged. Outputs are size-limited; CANARY_ fixture strings are redacted, and before/after diffs for firstName, lastName, email, displayName, and managerId are minimized — a synthetic tripwire, not a general PII detector. Each evidence record keeps the revision and dependencies needed to decide whether it is still valid.
 
-The suite contains 281 passing tests. Chrome 152 runs three fresh-session
+The suite contains 292 passing tests. Chrome 152 runs three fresh-session
 registration checks and a 12-round trace using real DOM edits and WebMCP calls. A
 hand-audited oracle confirms that the first find returns `{P2, P3, P4}` — one of
 two audited size-3 minimal sets — with four violation rows that together cover
