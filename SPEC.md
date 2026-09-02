@@ -336,7 +336,7 @@ label or `event.isTrusted` check.
 
 ## 11. Demo beats (single direction, updated to golden walk)
 
-The filmed structure is `docs/DEMO-SCRIPT.md` (v5): explain first, then the live
+The filmed structure is `docs/DEMO-SCRIPT.md` (v6): explain first, then the live
 walk, then receipts. The walk is the golden walk and nothing shorter: the agent
 stages 3 invariants at r17 and stops → the human reviews and clicks Confirm all
 (r18) → the agent finds witness {P2,P3,P4} with provenance → the human fixes
