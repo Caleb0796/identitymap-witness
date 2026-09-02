@@ -451,7 +451,7 @@ function render() {
       ps.textContent = `packet ${pkt.packetId} @ r${pkt.revision}: BLOCKED — ${pkt.blockers.map((b) => `${b.pin}:${b.reason}`).join(", ")}`;
       ps.classList.add("blocked");
     } else {
-      ps.textContent = `packet ${pkt.packetId} @ r${pkt.revision}: GREEN — every pin covered by fresh closing evidence`;
+      ps.textContent = `packet ${pkt.packetId} @ r${pkt.revision}: GREEN — every confirmed rule covered by fresh evidence`;
       ps.classList.add("green");
     }
   } else {

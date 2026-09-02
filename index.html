@@ -21,9 +21,9 @@
       </div>
       <ol id="how-it-works" class="how" aria-label="How this demo works">
         <li><b>Copy prompt 1</b> — your agent reads the draft and stages three rules, then stops.</li>
-        <li><b>Confirm all</b> — only your click puts staged rules in force.</li>
+        <li><b>Confirm all</b> — this page control puts staged rules in force; no tool can.</li>
         <li><b>Copy prompt 2</b> — the agent proves every violation with the smallest synthetic-persona set.</li>
-        <li><b>Edit any field</b> — dependent proof goes STALE; the agent must re-prove at the current revision.</li>
+        <li><b>Edit a field or priority</b> — dependent proof goes STALE; the agent must re-prove at the current revision.</li>
       </ol>
     </div>
     <div id="status" class="badges">
@@ -45,16 +45,16 @@
           <option value="ad,hris">ad → hris → okta</option>
           <option value="hris,ad">hris → ad → okta</option>
         </select>
-        · session-only until a human saves · synthetic personas, canary identities
+        · session-only; no save path connected · synthetic personas only, no real identities
       </div>
       <div id="evaluation-error" class="stale-banner" aria-live="polite" hidden></div>
       <div class="table-scroll" data-scroll-label="Mapping table">
-        <table id="grid"><thead><tr><th>target field</th><th>expression (draft)</th><th>prov</th></tr></thead><tbody></tbody></table>
+        <table id="grid"><thead><tr><th>target field</th><th>expression (draft)</th><th>winning sources</th></tr></thead><tbody></tbody></table>
       </div>
     </section>
     <section id="invariants" class="card">
       <h2>Pinned invariants</h2>
-      <p class="section-gloss">Rules currently in force. The agent can stage proposals; only a human click confirms.</p>
+      <p class="section-gloss">Rules currently in force. The WebMCP tools can stage proposals; confirmation happens through this page control.</p>
       <ul id="pins"><li class="hint">none pinned yet — the human states these; the agent stages them</li></ul>
     </section>
     <section id="pending-rules" class="card" aria-live="polite" hidden>
@@ -67,19 +67,20 @@
     <section id="witness" class="card">
       <h2>Counterexample matrix</h2>
       <p class="section-gloss">The minimum persona ids appear above the table; the table lists every violation row, including alternate witnesses.</p>
-      <div id="stale-banner" class="stale-banner" aria-live="polite" hidden>STALE — the draft changed after this evidence was computed; the packet below will refuse it</div>
+      <div id="stale-banner" class="stale-banner" aria-live="polite" hidden>STALE — the draft changed after this evidence was computed; those evidence ids cannot prepare a packet</div>
       <div class="table-scroll" data-scroll-label="Counterexample matrix table">
         <table id="matrix"><thead><tr><th>persona</th><th>invariant</th><th>field</th><th>detail</th></tr></thead><tbody></tbody></table>
       </div>
-      <div class="hint" id="matrix-hint" hidden>Select a persona to view provenance</div>
+      <div class="hint" id="matrix-hint" hidden>Select a violation row to view its field provenance</div>
     </section>
     <section id="provenance" class="card" hidden>
       <h2>Provenance rail</h2>
+      <p class="section-gloss">For the selected person and field: which source supplied each input, and which branch of the expression produced the value.</p>
       <div id="rail"></div>
     </section>
     <section id="packet" class="card">
       <h2>Review packet</h2>
-      <p class="section-gloss">Bundles fresh evidence for human review. Refuses stale evidence; Apply is never exposed to the agent.</p>
+      <p class="section-gloss">Bundles fresh evidence for human review. Refuses stale evidence. Apply is not exposed as a WebMCP tool and, in this demo, is a simulated final gate — no save path is connected.</p>
       <div id="packet-state" class="hint" aria-live="polite">no packet</div>
       <button id="apply" aria-label="Apply mapping (manual page control)" disabled title="Manual page control; not exposed as a WebMCP tool">Apply mapping (manual page control)</button>
       <div class="legend">GREEN — packet from fresh evidence at the current revision · STALE — a dependency changed; the old proof is dead · Pending — agent-proposed, awaiting your Confirm</div>

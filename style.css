@@ -48,7 +48,7 @@ td input[aria-invalid="true"] { border-color: #aa3434; outline: 2px solid #f3b8b
 .prov-chip { font: 600 .7rem/1.4 ui-monospace, monospace; color: #173f76; }
 #matrix tbody tr { cursor: pointer; }
 #matrix tbody tr:hover td { background: #f6f2e8; }
-.matrix-select { border: 0; border-radius: 3px; padding: .08rem .2rem; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.matrix-select { border: 0; border-radius: 3px; padding: .08rem .2rem; background: transparent; cursor: pointer; font: inherit; text-decoration: underline dotted; text-underline-offset: 2px; color: #1459d9; font-weight: 600; }
 .matrix-select:focus-visible { outline: 3px solid #1459d9; outline-offset: 2px; }
 #matrix td.viol { background: #fbe2df; color: #7c2a2a; font-weight: 600; }
 #matrix tbody tr.stale td { opacity: .4; text-decoration: line-through; }
