@@ -69,10 +69,11 @@ disabled UI and zero registered tools; then one browser session, rounds:
 6. re-find → fresh evidence; violations no longer include P3/inv-null
 7. preview_mapping_patch on `group` fix over {P2} → diff redacted-clean
 8. a real-DOM change on `#grid input[data-field="group"]` applies the group fix →
-   r20, then a real-DOM change on the labeled priority selector applies
-   `hris → ad → okta` → r21; assert every prior evidence record is stale and the
-   stale banner is visible; re-find returns a successful full clean sweep carrying
-   a fresh evidence id → prepare over that id → packet `blockers:[]`
+   r20; re-find returns the {P4} witness; then a real-DOM change on the labeled
+   priority selector applies `hris → ad → okta` → r21; assert every prior evidence
+   record is stale and the stale banner is visible; re-find returns a successful
+   full clean sweep carrying a fresh evidence id → prepare over that id → packet
+   `blockers:[]`
 9. recovery: wrong expectedRevision → REVISION_MISMATCH → corrected retry succeeds
 10. stage a 4th trivial rule at r21 → real-DOM Confirm all → r22; old packet is
     incomplete-by-coverage (blocker `uncovered`); stage the original 3 at r22 →
@@ -81,7 +82,8 @@ disabled UI and zero registered tools; then one browser session, rounds:
     find + prepare restores a green packet
 12. real grid change enters invalid `user.`: complete store snapshot byte-identical
     at r25, inline position error visible, matrix and GREEN packet intact; a valid
-    `user.managerId` commits exactly once → r26.
+    `user.managerId` commits exactly once → r26; a valid input-only edit (no blur)
+    is flushed by the next tool call → r27.
 Trace records every invocationId/status/payload/ms plus `snapshotBefore/After`,
 full-state SHA-256 before/after, and authoritative-slice SHA-256 before/after;
 every scripted human action is labeled `human-dom` with its page selector →

@@ -9,20 +9,22 @@ const TOOL_NAMES = new Set([
   "prepare_mapping_review",
 ]);
 const TOOL_ERROR_CODES = {
-  read_mapping_session: new Set(["EVALUATOR_FAILED", "PII_GUARD"]),
+  read_mapping_session: new Set(["ABORTED", "EVALUATOR_FAILED", "INVALID_INPUT", "PII_GUARD"]),
   stage_mapping_invariants: new Set([
-    "BAD_RULE", "EVALUATOR_FAILED", "PENDING_EXISTS", "PII_GUARD", "REVISION_MISMATCH",
+    "ABORTED", "BAD_RULE", "EVALUATOR_FAILED", "INVALID_INPUT", "PENDING_EXISTS", "PII_GUARD",
+    "REVISION_MISMATCH",
   ]),
   find_mapping_counterexample: new Set([
-    "BAD_RULE", "EVALUATOR_FAILED", "NO_INVARIANTS", "PII_GUARD", "REVISION_MISMATCH",
-    "WITNESS_EXCEEDS_CAP",
+    "ABORTED", "BAD_RULE", "EVALUATOR_FAILED", "INVALID_INPUT", "NO_INVARIANTS", "PII_GUARD",
+    "REVISION_MISMATCH", "WITNESS_EXCEEDS_CAP",
   ]),
   preview_mapping_patch: new Set([
-    "EVALUATOR_FAILED", "INVALID_AST", "PII_GUARD", "REVISION_MISMATCH", "UNKNOWN_PERSONA",
+    "ABORTED", "EVALUATOR_FAILED", "INVALID_AST", "INVALID_INPUT", "PII_GUARD",
+    "REVISION_MISMATCH", "UNKNOWN_PERSONA",
   ]),
   prepare_mapping_review: new Set([
-    "EVALUATOR_FAILED", "NO_EVIDENCE", "NO_INVARIANTS", "PII_GUARD", "REVISION_MISMATCH",
-    "STALE_EVIDENCE",
+    "ABORTED", "EVALUATOR_FAILED", "INVALID_INPUT", "NO_EVIDENCE", "NO_INVARIANTS", "PII_GUARD",
+    "REVISION_MISMATCH", "STALE_EVIDENCE",
   ]),
 };
 const SNAPSHOT_KEYS = ["nextId", "nextPendingVersion", "state"];
@@ -227,8 +229,11 @@ function validErrorDetails(error, entry, after) {
   ].includes(error.reason)
       && ["INVALID_AST", "STALE_EVIDENCE", "UNKNOWN_PERSONA"].includes(error.code)) return true;
   switch (error.code) {
+    case "ABORTED":
+      return same(keys, ["code"]);
     case "BAD_RULE":
     case "EVALUATOR_FAILED":
+    case "INVALID_INPUT":
     case "PII_GUARD":
       return reasonEnvelope;
     case "PENDING_EXISTS":

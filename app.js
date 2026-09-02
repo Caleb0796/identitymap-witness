@@ -160,6 +160,30 @@ function syncScrollRegions() {
 
 window.addEventListener("resize", syncScrollRegions);
 
+function commitExpressionInput(input) {
+  const error = input.parentElement.querySelector(".expression-error");
+  if (input.value.length > MAX_EXPRESSION_CHARS) {
+    input.setAttribute("aria-invalid", "true");
+    error.hidden = false;
+    error.textContent = `Expression is too long (${input.value.length} characters); maximum is ${MAX_EXPRESSION_CHARS}`;
+    return;
+  }
+  try {
+    parse(input.value);
+  } catch (caught) {
+    const position = Number.isInteger(caught?.position) ? caught.position : 0;
+    input.setAttribute("aria-invalid", "true");
+    error.hidden = false;
+    error.textContent = `Invalid expression at position ${position}: ${String(caught?.message ?? caught)}`;
+    return;
+  }
+  input.setAttribute("aria-invalid", "false");
+  error.hidden = true;
+  error.textContent = "";
+  store.dispatch({ type: "EDIT_EXPRESSION", field: input.dataset.field, expr: input.value });
+  render();
+}
+
 function renderRail(outs) {
   const sel = ui.selected;
   const section = $("#provenance");
@@ -310,27 +334,7 @@ function render() {
   }
   for (const input of document.querySelectorAll("#grid input")) {
     input.addEventListener("change", (ev) => {
-      const error = ev.target.parentElement.querySelector(".expression-error");
-      if (ev.target.value.length > MAX_EXPRESSION_CHARS) {
-        ev.target.setAttribute("aria-invalid", "true");
-        error.hidden = false;
-        error.textContent = `Expression is too long (${ev.target.value.length} characters); maximum is ${MAX_EXPRESSION_CHARS}`;
-        return;
-      }
-      try {
-        parse(ev.target.value);
-      } catch (caught) {
-        const position = Number.isInteger(caught?.position) ? caught.position : 0;
-        ev.target.setAttribute("aria-invalid", "true");
-        error.hidden = false;
-        error.textContent = `Invalid expression at position ${position}: ${String(caught?.message ?? caught)}`;
-        return;
-      }
-      ev.target.setAttribute("aria-invalid", "false");
-      error.hidden = true;
-      error.textContent = "";
-      store.dispatch({ type: "EDIT_EXPRESSION", field: ev.target.dataset.field, expr: ev.target.value });
-      render();
+      commitExpressionInput(ev.target);
     });
   }
 
@@ -459,6 +463,23 @@ function render() {
   }
 }
 
+function flushGridDrafts() {
+  try {
+    for (const input of document.querySelectorAll("#grid input")) {
+      try {
+        const committed = store.getState().expressions[input.dataset.field];
+        if (input.value === committed || input.value.length > MAX_EXPRESSION_CHARS) continue;
+        parse(input.value);
+        commitExpressionInput(input);
+      } catch {
+        // Invalid drafts and unexpected DOM state stay local and cannot block a tool call.
+      }
+    }
+  } catch {
+    // A missing or replaced grid cannot block the WebMCP surface.
+  }
+}
+
 $("#priority-select").addEventListener("change", (event) => {
   store.dispatch({ type: "SET_PRIORITY", priority: event.target.value.split(",") });
   render();
@@ -483,16 +504,13 @@ window.addEventListener("pagehide", (event) => {
   if (!event.persisted) lifecycle.abort();
 });
 let registeredCount = 0;
+let toolSnapshotBefore = null;
 if (present) {
   const registration = await registerToolDefinitions(
     TOOLS,
     (definition, options) => document.modelContext.registerTool(definition, options),
-    (tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      annotations: tool.annotations,
-      execute: createToolExecutor(store, personas, tool.name, (result) => {
+    (tool) => {
+      const executeTool = createToolExecutor(store, personas, tool.name, (result) => {
         if (result.ok && tool.name === "find_mapping_counterexample") {
           if (result.payload.cleanSweep) {
             ui.lastSweep = result.payload;
@@ -505,8 +523,19 @@ if (present) {
         }
         if (result.ok && tool.name === "prepare_mapping_review") ui.lastPacket = result.payload;
         render(); // UI updates BEFORE the tool returns (SPEC §7)
-      }),
-    }),
+      });
+      return {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        annotations: tool.annotations,
+        execute: async (args, context) => {
+          if (!context?.signal?.aborted) flushGridDrafts();
+          toolSnapshotBefore = store.snapshot();
+          return executeTool(args, context);
+        },
+      };
+    },
     lifecycle.signal,
     (count) => {
       registeredCount = count;
@@ -530,6 +559,7 @@ render();
 const inspection = Object.freeze({
   state: () => structuredClone(store.getState()),
   snapshot: () => structuredClone(store.snapshot()),
+  toolSnapshotBefore: () => structuredClone(toolSnapshotBefore),
   personas: () => structuredClone(personas),
   ui: () => structuredClone(ui),
   registeredToolCount: () => registeredCount,

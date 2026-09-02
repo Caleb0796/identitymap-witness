@@ -15,6 +15,13 @@ const fnv1a = (text) => {
   return digest.toString(16).padStart(8, "0");
 };
 const RULE_DIGEST = fnv1a(JSON.stringify([RULE]));
+const TOOL_NAMES = [
+  "read_mapping_session",
+  "stage_mapping_invariants",
+  "find_mapping_counterexample",
+  "preview_mapping_patch",
+  "prepare_mapping_review",
+];
 const authoritative = (snapshot) => ({
   revision: snapshot.state.revision,
   priority: snapshot.state.priority,
@@ -360,6 +367,37 @@ test("malformed success and error envelopes fail closed", () => {
     const result = auditTrace([malformed]);
     assert.ok(result.writeOracleFailures.some((failure) => /object payload|valid success or error envelope/.test(failure.reason)),
       JSON.stringify(result.writeOracleFailures));
+  }
+});
+
+test("transport failures are complete and exact for every tool", () => {
+  const snapshot = base();
+  for (const toolName of TOOL_NAMES) {
+    for (const error of [
+      { code: "ABORTED" },
+      { code: "INVALID_INPUT", reason: "schema rejected input" },
+    ]) {
+      assert.deepEqual(auditTrace([
+        entry(toolName, snapshot, snapshot, { error }),
+      ]), {
+        failedCallHashFailures: [],
+        writeOracleFailures: [],
+      }, `${toolName} ${error.code}`);
+    }
+
+    for (const error of [
+      { code: "ABORTED", reason: "unexpected" },
+      { reason: "missing code" },
+      { code: "ABORTED", extra: true },
+      { code: "INVALID_INPUT" },
+      { code: "INVALID_INPUT", reason: "" },
+      { code: "INVALID_INPUT", reason: "schema rejected input", extra: true },
+    ]) {
+      const result = auditTrace([entry(toolName, snapshot, snapshot, { error })]);
+      assert.ok(result.writeOracleFailures.some((failure) =>
+        /valid success or error envelope/.test(failure.reason)),
+      `${toolName} ${JSON.stringify(error)}: ${JSON.stringify(result.writeOracleFailures)}`);
+    }
   }
 });
 

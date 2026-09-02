@@ -430,11 +430,37 @@ async function e2e(baseUrl) {
       authoritativeHash: await hash(authoritative),
     };
   })()`, { awaitPromise: true });
-  const call = async (round, toolName, input) => {
-    const before = await captureState();
+  const captureToolState = () => s.evalJs(`(async () => {
+    const snapshot = window.__imw.toolSnapshotBefore();
+    const authoritative = {
+      revision: snapshot.state.revision,
+      priority: snapshot.state.priority,
+      expressions: snapshot.state.expressions,
+      pins: snapshot.state.pins,
+    };
+    const hash = async (value) => {
+      const bytes = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(JSON.stringify(value)),
+      );
+      return [...new Uint8Array(bytes)]
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+    };
+    return {
+      snapshot,
+      stateHash: await hash(snapshot),
+      authoritativeHash: await hash(authoritative),
+    };
+  })()`, { awaitPromise: true });
+  const call = async (round, toolName, input, { draftFlush = false } = {}) => {
+    const transportBefore = await captureState();
     const t0 = Date.now();
     const r = await invokeTool(s.cdp, s.sessionId, s.frameId, toolName, input);
+    const before = await captureToolState();
     const after = await captureState();
+    const preflightChanged = JSON.stringify(transportBefore.snapshot) !== JSON.stringify(before.snapshot);
+    assertEq(preflightChanged, draftFlush, `round ${round} ${toolName} preflight draft flush`);
     const text = textOf(r.output);
     trace.push({ round, kind: "tool", toolName, input, invocationId: r.invocationId,
       status: r.status, matched: r.matched,
@@ -584,6 +610,7 @@ async function e2e(baseUrl) {
     // 3 find → witness [P2,P3,P4], evidence E1
     const r3 = await call(3, "find_mapping_counterexample", { expectedRevision: 18 });
     assertEq(r3.p.personaIds, ["P2", "P3", "P4"], "round3 witness");
+    assertEq(r3.p.evidenceIds, ["E-1"], "round3 evidence id");
     const matrixButtons = await s.evalJs(`([...document.querySelectorAll(".matrix-select")].map((button) => ({
       personaId: button.dataset.personaId,
       field: button.dataset.field,
@@ -681,6 +708,7 @@ async function e2e(baseUrl) {
     const r6 = await call(6, "find_mapping_counterexample", { expectedRevision: 19 });
     assertEq(r6.p.personaIds, ["P2", "P4"], "round6 witness");
     assertEq(r6.p.violations.length, 3, "round6 violations");
+    assertEq(r6.p.evidenceIds, ["E-2"], "round6 evidence id");
     // 7 preview the group fix over P2 — draft untouched
     const r7 = await call(7, "preview_mapping_patch", {
       expectedRevision: 19, field: "group",
@@ -688,13 +716,19 @@ async function e2e(baseUrl) {
       personaIds: ["P2"] });
     assertEq(r7.p.diffs, [{ personaId: "P2", field: "group", before: "employees", after: "contractors" }], "round7 diff");
     assertEq(r7.p.remainingViolations, 0, "round7 remaining");
+    assertEq(r7.p.evidenceId, "E-3", "round7 evidence id");
     const rev7 = await s.evalJs("window.__imw.state().revision");
     assertEq(rev7, 19, "round7 preview must not bump revision");
-    // 8 human applies group fix (r20) + real priority control (r21); clean sweep → green packet
+    // 8 human applies group fix (r20), re-finds P4, then changes priority (r21); clean sweep → green packet
     const group8 = await humanExpression(8, "group", 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"');
     assertEq(group8.revisionAfter, 20, "round8 group revision");
     assertEq(group8.expressionAfter, 'String.toLowerCase(user.userType) == "contractor" ? "contractors" : "employees"', "round8 group expression");
     assertEq(group8.active, true, "round8 group edit preserves input focus");
+    const r8w = await call(8, "find_mapping_counterexample", { expectedRevision: 20 });
+    assertEq(r8w.p.personaIds, ["P4"], "round8 r20 witness");
+    assertEq(r8w.p.violations.length, 2, "round8 r20 violations");
+    assertEq(r8w.p.cleanSweep, false, "round8 r20 is not a clean sweep");
+    assertEq(r8w.p.evidenceIds, ["E-4"], "round8 r20 evidence id");
     const priority8 = await humanPriority(8, ["hris", "ad"]);
     assertEq(priority8.revisionAfter, 21, "round8 revision");
     assertEq(priority8.priorityAfter, ["hris", "ad"], "round8 priority committed through select");
@@ -706,6 +740,7 @@ async function e2e(baseUrl) {
     const r8 = await call(8, "find_mapping_counterexample", { expectedRevision: 21 });
     assertEq(r8.p.cleanSweep, true, "round8 clean sweep");
     assertEq(r8.p.fullSweep, true, "round8 full sweep");
+    assertEq(r8.p.evidenceIds, ["E-5"], "round8 clean-sweep evidence id");
     const rows8 = await s.evalJs('document.querySelectorAll("#matrix tbody tr").length');
     assertEq(rows8, 0, "round8 clean sweep clears matrix");
     const allClear8 = await s.evalJs('!document.querySelector("#all-clear").hidden && document.querySelector("#all-clear").textContent.includes("clean sweep — 0 violations across 8 personas at r21")');
@@ -713,6 +748,7 @@ async function e2e(baseUrl) {
     const E3 = r8.p.evidenceIds;
     const r8b = await call(8, "prepare_mapping_review", { expectedRevision: 21, evidenceIds: E3 });
     assertEq(r8b.p.blockers, [], "round8 packet green");
+    assertEq(r8b.p.packetId, "PKT-6", "round8 packet id");
     // 9 recovery: wrong expectedRevision → REVISION_MISMATCH with currentRevision → one retry works
     const r9 = await call(9, "find_mapping_counterexample", { expectedRevision: 17 });
     assertEq(r9.p.error.code, "REVISION_MISMATCH", "round9 code");
@@ -720,6 +756,7 @@ async function e2e(baseUrl) {
     const r9b = await call(9, "find_mapping_counterexample", { expectedRevision: r9.p.error.currentRevision });
     assertEq(r9b.p.cleanSweep, true, "round9 recovery lands on the clean sweep");
     assertEq(r9b.p.fullSweep, true, "round9 recovery covers every confirmed pin");
+    assertEq(r9b.p.evidenceIds, ["E-7"], "round9 recovery evidence id");
     // 10 pin add → packet incomplete-by-coverage; unpin → green again
     const r10 = await call(10, "stage_mapping_invariants", { expectedRevision: 21, invariants: [
       ...PINS, { id: "pin-extra", type: "forbidden_group", personaCategory: "nobody", group: "nothing" }] });
@@ -736,6 +773,7 @@ async function e2e(baseUrl) {
     assertEq(stale10a.applyDisabled, true, "round10 revision-only stale disables apply");
     const r10b = await call(10, "prepare_mapping_review", { expectedRevision: 22, evidenceIds: E3 });
     assertEq(r10b.p.blockers, [{ pin: "pin-extra", reason: "uncovered" }], "round10 uncovered blocker");
+    assertEq(r10b.p.packetId, "PKT-8", "round10 blocked packet id");
     const blocked10 = await s.evalJs(`({
       text: document.querySelector("#packet-state").textContent,
       applyDisabled: document.querySelector("#apply").disabled,
@@ -755,6 +793,7 @@ async function e2e(baseUrl) {
     assertEq(stale10c.applyDisabled, true, "round10 stale blocked packet disables apply");
     const r10d = await call(10, "prepare_mapping_review", { expectedRevision: 23, evidenceIds: E3 });
     assertEq(r10d.p.blockers, [], "round10 green after unpin");
+    assertEq(r10d.p.packetId, "PKT-9", "round10 green packet id");
     const green10 = await s.evalJs(`({
       text: document.querySelector("#packet-state").textContent,
       applyDisabled: document.querySelector("#apply").disabled,
@@ -779,11 +818,13 @@ async function e2e(baseUrl) {
     const r11 = await call(11, "find_mapping_counterexample", { expectedRevision: 25 });
     assertEq(r11.p.cleanSweep, true, "round11 repaired clean sweep");
     assertEq(r11.p.fullSweep, true, "round11 repaired full sweep");
+    assertEq(r11.p.evidenceIds, ["E-10"], "round11 evidence id");
     const r11b = await call(11, "prepare_mapping_review", {
       expectedRevision: 25,
       evidenceIds: r11.p.evidenceIds,
     });
     assertEq(r11b.p.blockers, [], "round11 recovered packet green");
+    assertEq(r11b.p.packetId, "PKT-11", "round11 packet id");
     const green11 = await s.evalJs(`({
       text: document.querySelector("#packet-state").textContent,
       applyDisabled: document.querySelector("#apply").disabled,
@@ -873,6 +914,33 @@ async function e2e(baseUrl) {
     assertEq(valid12.ariaInvalid, "false", "round12 valid expression clears invalid state");
     assertEq(valid12.errorHidden, true, "round12 valid expression clears inline error");
     assertEq(valid12.active, true, "round12 valid expression preserves input focus");
+
+    const inputOnlyExpression = "user.managerId == null ? null : user.managerId";
+    const inputOnly12 = await s.evalJs(`(() => {
+      const selector = '#grid input[data-field="managerId"]';
+      const input = document.querySelector(selector);
+      input.focus();
+      input.value = ${JSON.stringify(inputOnlyExpression)};
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      return {
+        revisionAfter: window.__imw.state().revision,
+        expressionAfter: window.__imw.state().expressions.managerId,
+        inputValue: input.value,
+        active: document.activeElement === input,
+      };
+    })()`);
+    trace.push({ round: 12, kind: "human-dom", via: "dom-input", selector: '#grid input[data-field="managerId"]',
+      action: { type: "INPUT_ONLY_EXPRESSION", field: "managerId", expr: inputOnlyExpression }, ...inputOnly12 });
+    assertEq(inputOnly12.revisionAfter, 26, "round12 input-only edit stays local before tool call");
+    assertEq(inputOnly12.expressionAfter, "user.managerId", "round12 input-only edit is initially uncommitted");
+    assertEq(inputOnly12.inputValue, inputOnlyExpression, "round12 input-only draft is visible");
+    assertEq(inputOnly12.active, true, "round12 input-only draft keeps focus");
+    const flushed12 = await call(12, "read_mapping_session", {}, { draftFlush: true });
+    assertEq(flushed12.p.revision, 27, "round12 tool call flushes input-only edit");
+    assertEq(flushed12.p.fields.find((field) => field.field === "managerId")?.expr,
+      inputOnlyExpression, "round12 read returns flushed managerId expression");
+    assertEq(await s.evalJs('document.querySelector("#rev-badge").textContent'), "r27",
+      "round12 revision badge shows flushed revision");
 
     const sha = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
     const configuredTrace = process.env.IMW_E2E_TRACE_PATH;
