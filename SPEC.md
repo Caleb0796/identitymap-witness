@@ -59,7 +59,7 @@ Measured in ~/mcp/outpocket (evidence/V0–V6, harness/drive.mjs) 2026-08-29:
 | C1 | API surface is `document.modelContext`; identifier `navigator.modelContext` is dead and banned in `src/**`, `harness/**` | V0/V1 |
 | C2 | Demo runtime: ChatGPT built-in browser (Chromium 151), `document.modelContext` present | V1 |
 | C3 | Local automation: Chrome 152 + `--enable-features=WebMCP` (= `WebMCPTesting`) + fresh `--user-data-dir`; flag required in every mode | flag 实测 |
-| C4 | Tool call pending >~22.3s dies. No tool waits on a human. Two-phase handshake only | V4 |
+| C4 | Tool call pending >~22.3s dies, observed in our own ChatGPT in-app-browser testing on 2026-08-29; the measurement is not part of this repository's automated evidence. No tool waits on a human. Two-phase handshake only | V4 |
 | C5 | Page-JS `executeTool(name,…)` throws; by-name calls go over CDP `WebMCP.invokeTool` → `WebMCP.toolResponded` correlated by invocationId; unknown name = -32602 at send | drive.mjs |
 | C6 | `getTools()` returns a Promise | drive.mjs |
 | C7 | `WebMCP.enable` returns OK with no page API — presence check is the completed round trip, nothing else | drive.mjs |
@@ -175,6 +175,7 @@ success payload includes `revision`. One text content item;
 and the list capped to fit, with `truncated:true` + `violationsTotal`; irreducibly
 over → `EVALUATOR_FAILED`). UI renders BEFORE return. Every tool has
 `untrustedContentHint:true`; only `read_mapping_session` has `readOnlyHint:true`.
+Output size is a second failure boundary: schema-valid states (e.g. five 512-character expressions) can exceed the 1,500-character payload cap and return EVALUATOR_FAILED rather than a silently truncated draft.
 The other four use `readOnlyHint:false` because they stage pending state or record
 derived evidence/packets. Hints are not security. No apply/save/push tool exists.
 All failed calls restore the full snapshot, including both hidden allocators.
@@ -348,8 +349,8 @@ violations remain (§7), so any cut that shows GREEN earlier is wrong.
 
 ## 12. Public-material rules
 
-No WindTunnel, no arXiv 2508.09171, no uniqueness claims, concessions #1/#2 stated
-before any judge asks. Judging map (see the criteria table in
+No prohibited external benchmark or paper references, no uniqueness claims, concessions #1/#2 stated before any judge asks.
+Judging map (see the criteria table in
 `docs/DEMO-SCRIPT.md`): Leverage = the page-authored five-tool surface and the
 two-phase confirm; Execution = EVAL layers all green + error recovery on camera;
 Impact = any page holding an unsaved draft can author the same contract;

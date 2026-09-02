@@ -5,17 +5,17 @@ identity providers before those profiles drive access. A subtle mapping mistake 
 give a contractor employee permissions, erase a manager relationship, or let stale
 directory data override HR.
 
-> Catch identity-mapping mistakes before they go live. A WebMCP agent proves every broken rule with the fewest synthetic test users, then rechecks every edit while a human keeps control.
-
 Two concessions first: unsaved-draft preview already exists as a first-party
 product pattern, and another page-local agent with the same state and rules could
 run the same deterministic engine. What this entry adds is the page-authored safety
 contract and an evidence lifecycle that makes old proof expire.
 
+> Catch identity-mapping mistakes before they go live. A WebMCP agent proves every broken rule with the fewest synthetic test users, then rechecks every edit while a human keeps control.
+
 IdentityMap Witness is a WebMCP-powered workbench for reviewing that unsaved draft.
 A human confirms the safety rules; five page-authored `document.modelContext` tools
 let an agent inspect the current revision, find the smallest synthetic test set
-that exposes every violation, explain source provenance, preview redacted fixes,
+that exposes every violation, explain source provenance, preview identity-minimized fixes,
 and prepare a review packet only from fresh evidence. Every relevant edit makes
 dependent proof stale. No WebMCP tool can save or apply changes.
 
@@ -70,11 +70,11 @@ the demo path.
 
 | tool | authority |
 |---|---|
-| `read_mapping_session` | Read the current redacted draft, confirmed rules, pending state, and revision. |
+| `read_mapping_session` | Read current draft expressions, confirmed rule ids, pending state, and revision; returns no profile values. |
 | `stage_mapping_invariants` | Stage canonical pending rules for human review; it cannot confirm them. |
 | `find_mapping_counterexample` | Exhaustively find a minimal synthetic witness against confirmed rules. |
 | `preview_mapping_patch` | Preview a redacted patch without mutating the draft. |
-| `prepare_mapping_review` | Build a packet only from complete, fresh evidence. |
+| `prepare_mapping_review` | Build a packet from fresh evidence; coverage and blockers show whether it is complete, and only a fresh blocker-free packet turns GREEN. |
 
 ## Run locally
 

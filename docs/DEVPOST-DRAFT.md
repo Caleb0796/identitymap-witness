@@ -83,10 +83,7 @@ The application uses vanilla JavaScript, ES modules, and Node 21+. Five
 counterexample set, preview a patch, and prepare the review packet. One
 deterministic engine powers the browser, tests, and evaluation.
 
-Strict schemas reject extra or malformed input. Failed tool calls leave the draft
-unchanged. Outputs are size-limited and redact identity-bearing fields, while each
-evidence record keeps the revision and dependencies needed to decide whether it is
-still valid.
+Strict schemas reject extra or malformed input. Failed tool calls leave the committed draft unchanged. Outputs are size-limited; CANARY_ fixture strings are redacted, and before/after diffs for firstName, lastName, email, displayName, and managerId are minimized — a synthetic tripwire, not a general PII detector. Each evidence record keeps the revision and dependencies needed to decide whether it is still valid.
 
 The suite contains 281 passing tests. Chrome 152 runs three fresh-session
 registration checks and a 12-round trace using real DOM edits and WebMCP calls. A
@@ -102,8 +99,10 @@ invalidate earlier reasoning, so evidence is bound to its exact dependencies.
 Relevant edits strike through old rows and block the old packet.
 
 Human approval also could not wait inside one long-running tool call: pending calls
-ended after roughly 22 seconds in testing. The tool now stages rule cards and
-returns; a person confirms them; the next agent turn re-reads the state. Stale
+ended after roughly 22 seconds,
+observed in our own ChatGPT in-app-browser testing on 2026-08-29; the measurement is not part of this repository's automated evidence.
+The tool now stages rule cards and returns; a person confirms them; the next agent
+turn re-reads the state. Stale
 buttons, malformed inputs, hostile text, and empty source values became executable
 failure cases.
 

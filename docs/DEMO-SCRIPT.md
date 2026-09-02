@@ -44,7 +44,7 @@ Read this once and the script below needs no other context.
   canonical rule fields, a version, and a content fingerprint), a **Confirm
   all** button, a STALE banner, a counterexample matrix, a provenance rail, a
   review packet with GREEN/blocked states, and **Apply mapping (manual page
-  control)** — a button the agent cannot invoke.
+  control)** — a button not exposed through the five WebMCP tools.
 - The verified walk (numbers are load-bearing; do not improvise): fresh page is
   r17 → human clicks Confirm all → r18 → agent finds witness **{P2, P3, P4}** →
   human fixes managerId (`user.managerId`) → r19, evidence goes STALE → agent
@@ -58,9 +58,11 @@ Read this once and the script below needs no other context.
   `node tools/verify.mjs` begins with `STATUS CODE_COMPLETE`; `node eval/run.mjs` ends in `RESULT: PASS`;
   `npm test` reports 281 passing; the e2e writes a 12-round trace file.
 - A real platform constraint shaped the design: a pending WebMCP tool call dies
-  after roughly 22 seconds, so human approval cannot happen inside a tool call.
-  Staging returns immediately; the human confirms on the page; the agent is
-  told to re-read afterwards.
+  after roughly 22 seconds,
+  observed in our own ChatGPT in-app-browser testing on 2026-08-29; the measurement is not part of this repository's automated evidence.
+  Human approval therefore cannot happen inside a tool call. Staging returns
+  immediately; the human confirms on the page; the agent is told to re-read
+  afterwards.
 
 ## How this script maps to the judging criteria
 
