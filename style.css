@@ -12,6 +12,8 @@ h1 { font-size: 1.45rem; margin: 0; letter-spacing: -.02em; }
 #copy-prompt-1 { background: #17212b; border-color: #17212b; color: #fffdf8; }
 #copy-prompt-1:hover { background: #1459d9; color: #fff; }
 #copy-status { min-height: 1.1rem; color: #08795e; font-size: .75rem; font-weight: 700; }
+#copy-status.error { color: #aa3434; }
+.prompt-fallback { width: 100%; min-height: 5.5rem; white-space: pre-wrap; font: .78rem/1.5 ui-monospace, monospace; background: #f1ede2; border: 1px solid #cfc9bb; border-radius: 6px; padding: .5rem .65rem; margin: .4rem 0 0; }
 .how { counter-reset: step; display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin: .55rem 0 0; padding: 0; list-style: none; color: #6b7683; font-size: .75rem; line-height: 1.4; }
 .how li { counter-increment: step; position: relative; flex: 1 1 15rem; padding-left: 1.4rem; }
 .how li::before { content: counter(step); position: absolute; left: 0; top: .02rem; width: 1.05rem; height: 1.05rem; border-radius: 50%; background: #e7e3d8; color: #5b6672; text-align: center; font: 600 .67rem/1.05rem ui-monospace, monospace; }

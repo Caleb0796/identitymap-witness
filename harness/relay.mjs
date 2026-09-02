@@ -61,6 +61,8 @@ async function bootSession(baseUrl) {
       inspectedCount: window.__imw.registeredToolCount(),
       registryCount: tools.length,
       badge,
+      copyButtonsEnabled: [...document.querySelectorAll("#copy-prompt-1, #copy-prompt-2")]
+        .every((button) => !button.disabled),
     };
   })()`, { awaitPromise: true });
   if (!boundary.frozen || !boundary.functionsOnly || !boundary.forbiddenAbsent || !boundary.cloneIsolated)
@@ -68,6 +70,8 @@ async function bootSession(baseUrl) {
   if (boundary.inspectedCount !== boundary.registryCount
       || !boundary.badge.includes(`tools: ${boundary.registryCount}/5 registered`))
     throw new Error(`registration count mismatch: ${JSON.stringify(boundary)}`);
+  if (!boundary.copyButtonsEnabled)
+    throw new Error(`copy buttons stayed disabled after registration: ${JSON.stringify(boundary)}`);
   const { frameTree } = await cdp.send("Page.getFrameTree", {}, sessionId);
   return { chrome, cdp, sessionId, frameId: frameTree.frame.id, evalJs, cdpDomainEnabled };
 }
@@ -143,6 +147,7 @@ const PINS = [
   { id: "inv-null", type: "null_if_missing", field: "managerId", dependsOn: "managerId" },
   { id: "inv-sot", type: "source_of_truth", field: "department", source: "hris" },
 ];
+const COPY_PROMPT_1 = "Read the mapping session on this page. Stage exactly these three invariants and then stop and tell me to confirm them on the page: (1) contractors must never map into the employees group; (2) if no source supplies managerId the target must stay null; (3) hris is the source of truth for department. Do not call any other tool until I tell you I confirmed.";
 const HOSTILE_PIN = {
   type: "forbidden_group",
   personaCategory: "x",
@@ -331,6 +336,57 @@ async function smokeSession(round, baseUrl) {
     assertEq(previewSchema.properties.field.enum,
       ["displayName", "group", "managerId", "department", "email"], "preview field enum");
     assertEq(previewSchema.properties.expr.maxLength, 512, "preview expression budget");
+
+    if (round === 1) {
+      const copyFallback = await s.evalJs(`(async () => {
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: { writeText: () => Promise.reject(new Error("clipboard rejected")) },
+        });
+        Object.defineProperty(document, "execCommand", {
+          configurable: true,
+          value: () => false,
+        });
+        document.querySelector("#copy-prompt-1").click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const textarea = document.querySelector("#prompt-fallback");
+        const failure = {
+          hidden: textarea.hidden,
+          value: textarea.value,
+          readOnly: textarea.readOnly,
+          active: document.activeElement === textarea,
+          selectionStart: textarea.selectionStart,
+          selectionEnd: textarea.selectionEnd,
+          status: document.querySelector("#copy-status").textContent,
+          statusError: document.querySelector("#copy-status").classList.contains("error"),
+        };
+        navigator.clipboard.writeText = () => Promise.resolve();
+        document.querySelector("#copy-prompt-2").click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return { failure, success: {
+          hidden: textarea.hidden,
+          value: textarea.value,
+          status: document.querySelector("#copy-status").textContent,
+          statusError: document.querySelector("#copy-status").classList.contains("error"),
+        } };
+      })()`, { awaitPromise: true });
+      assertEq(copyFallback.failure, {
+        hidden: false,
+        value: COPY_PROMPT_1,
+        readOnly: true,
+        active: true,
+        selectionStart: 0,
+        selectionEnd: COPY_PROMPT_1.length,
+        status: "Copy failed — prompt selected below; press ⌘C or Ctrl+C",
+        statusError: true,
+      }, "clipboard failure exposes selected prompt fallback");
+      assertEq(copyFallback.success, {
+        hidden: true,
+        value: "",
+        status: "copied — prompt 2 ready to paste",
+        statusError: false,
+      }, "clipboard success clears prompt fallback");
+    }
 
     const read = await invokeTool(s.cdp, s.sessionId, s.frameId, "read_mapping_session", {});
     if (!read.roundTrip) throw new Error(`read round trip failed: ${JSON.stringify(read)}`);
@@ -611,6 +667,13 @@ async function e2e(baseUrl) {
     const r3 = await call(3, "find_mapping_counterexample", { expectedRevision: 18 });
     assertEq(r3.p.personaIds, ["P2", "P3", "P4"], "round3 witness");
     assertEq(r3.p.evidenceIds, ["E-1"], "round3 evidence id");
+    assertEq(await s.evalJs(`({
+      hidden: document.querySelector("#witness-summary").hidden,
+      text: document.querySelector("#witness-summary").textContent,
+    })`), {
+      hidden: false,
+      text: "Minimal witness (3): P2, P3, P4 · 4 violation rows, including alternate witnesses",
+    }, "round3 witness summary");
     const matrixButtons = await s.evalJs(`([...document.querySelectorAll(".matrix-select")].map((button) => ({
       personaId: button.dataset.personaId,
       field: button.dataset.field,
@@ -709,6 +772,13 @@ async function e2e(baseUrl) {
     assertEq(r6.p.personaIds, ["P2", "P4"], "round6 witness");
     assertEq(r6.p.violations.length, 3, "round6 violations");
     assertEq(r6.p.evidenceIds, ["E-2"], "round6 evidence id");
+    assertEq(await s.evalJs(`({
+      hidden: document.querySelector("#witness-summary").hidden,
+      text: document.querySelector("#witness-summary").textContent,
+    })`), {
+      hidden: false,
+      text: "Minimal witness (2): P2, P4 · 3 violation rows, including alternate witnesses",
+    }, "round6 witness summary");
     // 7 preview the group fix over P2 — draft untouched
     const r7 = await call(7, "preview_mapping_patch", {
       expectedRevision: 19, field: "group",
@@ -729,6 +799,13 @@ async function e2e(baseUrl) {
     assertEq(r8w.p.violations.length, 2, "round8 r20 violations");
     assertEq(r8w.p.cleanSweep, false, "round8 r20 is not a clean sweep");
     assertEq(r8w.p.evidenceIds, ["E-4"], "round8 r20 evidence id");
+    assertEq(await s.evalJs(`({
+      hidden: document.querySelector("#witness-summary").hidden,
+      text: document.querySelector("#witness-summary").textContent,
+    })`), {
+      hidden: false,
+      text: "Minimal witness (1): P4 · 2 violation rows, including alternate witnesses",
+    }, "round8 r20 witness summary");
     const priority8 = await humanPriority(8, ["hris", "ad"]);
     assertEq(priority8.revisionAfter, 21, "round8 revision");
     assertEq(priority8.priorityAfter, ["hris", "ad"], "round8 priority committed through select");
@@ -743,6 +820,10 @@ async function e2e(baseUrl) {
     assertEq(r8.p.evidenceIds, ["E-5"], "round8 clean-sweep evidence id");
     const rows8 = await s.evalJs('document.querySelectorAll("#matrix tbody tr").length');
     assertEq(rows8, 0, "round8 clean sweep clears matrix");
+    assertEq(await s.evalJs(`({
+      hidden: document.querySelector("#witness-summary").hidden,
+      text: document.querySelector("#witness-summary").textContent,
+    })`), { hidden: true, text: "" }, "round8 clean sweep hides witness summary");
     const allClear8 = await s.evalJs('!document.querySelector("#all-clear").hidden && document.querySelector("#all-clear").textContent.includes("clean sweep — 0 violations across 8 personas at r21")');
     assertEq(allClear8, true, "round8 all-clear visible");
     const E3 = r8.p.evidenceIds;

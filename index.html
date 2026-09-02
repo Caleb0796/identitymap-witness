@@ -17,6 +17,7 @@
         <button id="copy-prompt-2" type="button" aria-describedby="copy-status">Copy prompt 2 — after Confirm all</button>
         <button id="reset-demo" type="button">Reset demo</button>
         <span id="copy-status" role="status" aria-live="polite"></span>
+        <textarea id="prompt-fallback" class="prompt-fallback" readonly hidden></textarea>
       </div>
       <ol id="how-it-works" class="how" aria-label="How this demo works">
         <li><b>Copy prompt 1</b> — your agent reads the draft and stages three rules, then stops.</li>
@@ -31,6 +32,7 @@
       <span id="tools-badge" class="badge">tools: —</span>
       <span id="rev-badge" class="badge rev">r—</span>
     </div>
+    <p id="webmcp-hint" class="hint" hidden>WebMCP is not available in this browser. Open this page in ChatGPT's built-in browser with site tools enabled for this site, or in Chrome 152 launched with --enable-features=WebMCP, then reload.</p>
   </header>
   <main>
     <div id="initialization-error" class="stale-banner" role="alert" aria-atomic="true" hidden></div>
@@ -64,7 +66,7 @@
     </section>
     <section id="witness" class="card">
       <h2>Counterexample matrix</h2>
-      <p class="section-gloss">The smallest set of synthetic people demonstrating every currently violated rule.</p>
+      <p class="section-gloss">The minimum persona ids appear above the table; the table lists every violation row, including alternate witnesses.</p>
       <div id="stale-banner" class="stale-banner" aria-live="polite" hidden>STALE — the draft changed after this evidence was computed; the packet below will refuse it</div>
       <div class="table-scroll" data-scroll-label="Counterexample matrix table">
         <table id="matrix"><thead><tr><th>persona</th><th>invariant</th><th>field</th><th>detail</th></tr></thead><tbody></tbody></table>

@@ -23,5 +23,20 @@ test("copy prompts are exact, independently bound, and have a readonly fallback"
   assert.ok(app.includes("navigator.clipboard?.writeText"));
   assert.ok(app.includes("textarea.readOnly = true"));
   assert.ok(app.includes('document.execCommand("copy")'));
+  assert.match(html, /<textarea id="prompt-fallback" class="prompt-fallback" readonly hidden><\/textarea>/);
+  const handler = app.slice(app.indexOf("for (const [selector, prompt, label]"),
+    app.indexOf('$("#apply").addEventListener'));
+  assert.ok(handler.includes('const fallback = $("#prompt-fallback");'));
+  const success = handler.slice(handler.indexOf("try {"), handler.indexOf("} catch {"));
+  const failure = handler.slice(handler.indexOf("} catch {"));
+  assert.match(success, /fallback\.hidden = true;[\s\S]*fallback\.value = "";/);
+  assert.match(failure, /fallback\.value = prompt;[\s\S]*fallback\.hidden = false;[\s\S]*fallback\.focus\(\);[\s\S]*fallback\.select\(\);/);
+  assert.match(success, /status\.classList\.remove\("error"\)/);
+  assert.match(failure, /status\.classList\.add\("error"\)/);
   assert.ok(app.includes('$("#reset-demo").addEventListener("click", () => location.reload());'));
+});
+
+test("WebMCP-absent guidance is present and toggled from method detection", () => {
+  assert.ok(html.includes(`<p id="webmcp-hint" class="hint" hidden>WebMCP is not available in this browser. Open this page in ChatGPT's built-in browser with site tools enabled for this site, or in Chrome 152 launched with --enable-features=WebMCP, then reload.</p>`));
+  assert.ok(app.includes('$("#webmcp-hint").hidden = present;'));
 });

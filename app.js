@@ -16,9 +16,12 @@ const present = typeof document.modelContext?.registerTool === "function";
 $("#origin-badge").textContent = `origin: ${location.host}`;
 $("#mc-badge").textContent = `modelContext: ${present ? "present" : "absent"}`;
 $("#mc-badge").classList.add(present ? "on" : "off");
+$("#webmcp-hint").hidden = present;
 $("#tools-badge").textContent = "tools: loading";
 $("#tools-badge").classList.remove("on", "off");
 $("#reset-demo").addEventListener("click", () => location.reload());
+const copyButtons = ["#copy-prompt-1", "#copy-prompt-2"].map((selector) => $(selector));
+if (present) for (const button of copyButtons) button.disabled = true;
 
 let personas = null;
 let dataError = null;
@@ -53,7 +56,11 @@ const allClear = document.createElement("div");
 allClear.id = "all-clear";
 allClear.className = "hint";
 allClear.hidden = true;
-$("#matrix").closest(".table-scroll").before(allClear);
+const witnessSummary = document.createElement("div");
+witnessSummary.id = "witness-summary";
+witnessSummary.className = "hint";
+witnessSummary.hidden = true;
+$("#matrix").closest(".table-scroll").before(witnessSummary, allClear);
 
 async function copyText(text) {
   if (navigator.clipboard?.writeText) {
@@ -374,6 +381,11 @@ function render() {
   const sweep = ui.lastSweep;
   const sweepStale = sweep && (sweep.evidenceIds ?? []).some((id) => s.evidence[id]?.stale);
   const sweepStillFull = sweep?.fullSweep && sweep.confirmedInvariantCount === s.pins.length;
+  const hasWitness = Boolean(find && !find.cleanSweep && find.personaIds.length > 0);
+  witnessSummary.hidden = !hasWitness;
+  witnessSummary.textContent = hasWitness
+    ? `Minimal witness (${find.personaIds.length}): ${find.personaIds.join(", ")} · ${find.violations.length} violation rows, including alternate witnesses`
+    : "";
   allClear.hidden = !(sweep?.cleanSweep && !sweepStale);
   if (sweep?.cleanSweep && !sweepStale) {
     allClear.textContent = sweepStillFull
@@ -489,11 +501,21 @@ for (const [selector, prompt, label] of [
   ["#copy-prompt-2", COPY_PROMPT_2, "prompt 2 ready to paste"],
 ]) {
   $(selector).addEventListener("click", async () => {
+    const status = $("#copy-status");
+    const fallback = $("#prompt-fallback");
     try {
       await copyText(prompt);
-      $("#copy-status").textContent = `copied — ${label}`;
+      status.textContent = `copied — ${label}`;
+      status.classList.remove("error");
+      fallback.hidden = true;
+      fallback.value = "";
     } catch {
-      $("#copy-status").textContent = "copy failed — clipboard unavailable";
+      fallback.value = prompt;
+      fallback.hidden = false;
+      fallback.focus();
+      fallback.select();
+      status.textContent = "Copy failed — prompt selected below; press ⌘C or Ctrl+C";
+      status.classList.add("error");
     }
   });
 }
@@ -544,11 +566,13 @@ if (present) {
     },
   );
   registeredCount = registration.registeredCount;
+  const registrationReady = !registration.failed && registeredCount === 5;
   $("#tools-badge").textContent = registration.failed
-    ? "tools: registration failed"
+    ? "tools: registration failed — Reset demo to retry"
     : `tools: ${registeredCount}/5 registered`;
   $("#tools-badge").classList.remove("on", "off");
-  $("#tools-badge").classList.add(!registration.failed && registeredCount === 5 ? "on" : "off");
+  $("#tools-badge").classList.add(registrationReady ? "on" : "off");
+  for (const button of copyButtons) button.disabled = !registrationReady;
 } else {
   $("#tools-badge").textContent = "tools: 0/5 registered";
   $("#tools-badge").classList.remove("on", "off");

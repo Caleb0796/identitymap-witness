@@ -63,24 +63,67 @@ test("app registration uses method feature detection and a non-BFCache page life
   assert.match(source, /document\.modelContext\.registerTool\(definition, options\)/);
 });
 
-test("registration awaits success, continues after rejection, and reports only resolved tools", async () => {
-  const signal = new AbortController().signal;
-  const attempted = [];
-  const counts = [];
-  const result = await registerToolDefinitions(
-    [{ name: "first" }, { name: "second" }, { name: "third" }],
-    (definition, options) => {
-      attempted.push([definition.name, options.signal]);
-      if (definition.name === "second") return Promise.reject(new Error("mock rejection"));
-      return definition.name === "first" ? undefined : Promise.resolve();
-    },
-    (tool) => tool,
-    signal,
-    (count) => counts.push(count),
-  );
-  assert.deepEqual(attempted, [["first", signal], ["second", signal], ["third", signal]]);
-  assert.deepEqual(counts, [1, 2]);
-  assert.deepEqual(result, { registeredCount: 2, failed: true });
+test("registration exposes loading, partial-failure, and success states", async (t) => {
+  await t.test("loading", async () => {
+    let resolveRegistration;
+    let settled = false;
+    const counts = [];
+    const registration = registerToolDefinitions(
+      [{ name: "first" }],
+      () => new Promise((resolve) => { resolveRegistration = resolve; }),
+      (tool) => tool,
+      new AbortController().signal,
+      (count) => counts.push(count),
+    );
+    registration.then(() => { settled = true; });
+    assert.deepEqual(counts, []);
+    assert.equal(settled, false);
+    resolveRegistration();
+    assert.deepEqual(await registration, { registeredCount: 1, failed: false });
+    assert.deepEqual(counts, [1]);
+  });
+
+  await t.test("partial failure", async () => {
+    const signal = new AbortController().signal;
+    const attempted = [];
+    const counts = [];
+    const result = await registerToolDefinitions(
+      [{ name: "first" }, { name: "second" }, { name: "third" }],
+      (definition, options) => {
+        attempted.push([definition.name, options.signal]);
+        if (definition.name === "second") return Promise.reject(new Error("mock rejection"));
+        return definition.name === "first" ? undefined : Promise.resolve();
+      },
+      (tool) => tool,
+      signal,
+      (count) => counts.push(count),
+    );
+    assert.deepEqual(attempted, [["first", signal], ["second", signal], ["third", signal]]);
+    assert.deepEqual(counts, [1, 2]);
+    assert.deepEqual(result, { registeredCount: 2, failed: true });
+  });
+
+  await t.test("success", async () => {
+    const counts = [];
+    const result = await registerToolDefinitions(
+      [{ name: "first" }, { name: "second" }, { name: "third" }],
+      () => Promise.resolve(),
+      (tool) => tool,
+      new AbortController().signal,
+      (count) => counts.push(count),
+    );
+    assert.deepEqual(counts, [1, 2, 3]);
+    assert.deepEqual(result, { registeredCount: 3, failed: false });
+  });
+});
+
+test("present WebMCP gates copy buttons until all five registrations succeed", async () => {
+  const source = await readFile(join(ROOT, "app.js"), "utf8");
+  assert.match(source, /const copyButtons = \["#copy-prompt-1", "#copy-prompt-2"\]/);
+  assert.match(source, /if \(present\) for \(const button of copyButtons\) button\.disabled = true;/);
+  assert.match(source, /const registrationReady = !registration\.failed && registeredCount === 5;/);
+  assert.ok(source.includes('"tools: registration failed — Reset demo to retry"'));
+  assert.match(source, /for \(const button of copyButtons\) button\.disabled = !registrationReady;/);
 });
 
 test("an already-aborted execute callback cannot enter runTool or move allocators", async () => {
