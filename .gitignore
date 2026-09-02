@@ -1,4 +1,6 @@
 node_modules/
+.env
+.env.*
 eval/out/tmp-*
 eval/out/relay-*.json
 eval/out/report.json

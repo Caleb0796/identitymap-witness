@@ -26,25 +26,16 @@ rule on an unsaved draft — and the proof dies when you edit what it depended o
 
 **Live demo:** https://identitymap-witness.onrender.com
 
-## Current status
+## Evidence
 
 - [`data/oracle.json`](data/oracle.json) is human-audited. Commit `a575653` carries
   the required `Oracle-Audited: yes` trailer.
-- The latest local [`eval/out/report.json`](eval/out/report.json) completed with
-  unit, three-cold-session smoke, and 12-round real-DOM E2E layers at exit 0. It
-  reports 4/4 seeded defect classes, the audited size-3 oracle witness, zero
-  write-oracle/hash/PII failures, `oracleAudited: true`, and no watermark. Generated
-  eval output is intentionally git-ignored; reproduce it with `node eval/run.mjs`.
-  Before submission, the final report and HEAD-bound relay trace are committed
-  once, in an evidence-only commit from the final code state (see
-  [`docs/EVIDENCE-CHECKLIST.md`](docs/EVIDENCE-CHECKLIST.md)), so these links
-  resolve for judges; committing them earlier would bind them to a superseded
-  commit.
-- Final `npm test` count: **292 tests, 292 passed, 0 failed, 0 skipped**. No
-  coverage percentage is claimed.
-- The remaining entry work is human-run model evaluation, final video capture,
-  public-repository verification, and submission. See
-  [`docs/EVIDENCE-CHECKLIST.md`](docs/EVIDENCE-CHECKLIST.md).
+- The committed eval bundle contains [`eval/out/report.json`](eval/out/report.json)
+  and its HEAD-bound `relay-<sha>.json` trace. The report's `sha` field names the
+  commit it was produced from and identifies the paired relay trace. Both
+  regenerate with `node eval/run.mjs`.
+- `npm test`: **292 tests, 292 passed, 0 failed, 0 skipped**.
+- No coverage percentage is claimed.
 
 ## Two-phase judge path
 

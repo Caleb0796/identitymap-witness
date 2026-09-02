@@ -1,6 +1,7 @@
 {
   "name": "identitymap-witness",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": { "test": "node --test", "serve": "node harness/serve.mjs" },
   "engines": { "node": ">=21" }
