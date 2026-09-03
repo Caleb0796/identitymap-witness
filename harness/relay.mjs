@@ -986,10 +986,10 @@ async function e2e(baseUrl) {
       };
     })()`);
     assertEq(afterRead12.snapshot, before12.snapshot, "round12 read during invalid local draft leaves state byte-identical");
-    assertEq(afterRead12.inputValue, "user.", "round12 tool render preserves invalid local value");
-    assertEq(afterRead12.ariaInvalid, "true", "round12 tool render preserves invalid state");
-    assertEq(afterRead12.errorText, invalid12.errorText, "round12 tool render preserves inline error");
-    assertEq(afterRead12.active, true, "round12 tool render preserves input focus");
+    assertEq(afterRead12.inputValue, "user.", "round12 read preserves invalid local value");
+    assertEq(afterRead12.ariaInvalid, "true", "round12 read preserves invalid state");
+    assertEq(afterRead12.errorText, invalid12.errorText, "round12 read preserves inline error");
+    assertEq(afterRead12.active, true, "round12 read preserves input focus");
 
     const overlongExpression = `"${"a".repeat(512)}"`;
     const overlong12 = await humanExpression(12, "managerId", overlongExpression);
