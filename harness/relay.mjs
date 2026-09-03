@@ -148,6 +148,7 @@ const PINS = [
   { id: "inv-sot", type: "source_of_truth", field: "department", source: "hris" },
 ];
 const COPY_PROMPT_1 = "Read the mapping session on this page. Stage exactly these three invariants and then stop and tell me to confirm them on the page: (1) contractors must never map into the employees group; (2) if no source supplies managerId the target must stay null; (3) hris is the source of truth for department. Do not call any other tool until I tell you I confirmed.";
+const UNCOMMITTED_DRAFT_REASON = "visible expression drafts must be committed or reverted by the human before running this tool; then call read_mapping_session again";
 const HOSTILE_PIN = {
   type: "forbidden_group",
   personaCategory: "x",
@@ -509,24 +510,35 @@ async function e2e(baseUrl) {
       authoritativeHash: await hash(authoritative),
     };
   })()`, { awaitPromise: true });
-  const call = async (round, toolName, input, { draftFlush = false } = {}) => {
-    const transportBefore = await captureState();
+  const call = async (round, toolName, input) => {
+    const invocationBefore = await captureState();
     const t0 = Date.now();
     const r = await invokeTool(s.cdp, s.sessionId, s.frameId, toolName, input);
-    const before = toolName === "read_mapping_session" ? transportBefore : await captureToolState();
+    const before = toolName === "read_mapping_session" ? invocationBefore : await captureToolState();
     const after = await captureState();
-    const preflightChanged = JSON.stringify(transportBefore.snapshot) !== JSON.stringify(before.snapshot);
-    assertEq(preflightChanged, draftFlush, `round ${round} ${toolName} preflight draft flush`);
     const text = textOf(r.output);
+    const payload = text ? JSON.parse(text) : null;
+    assertEq(before.snapshot, invocationBefore.snapshot,
+      `round ${round} ${toolName} handler entry matches invocation`);
+    assertEq(before.stateHash, invocationBefore.stateHash,
+      `round ${round} ${toolName} handler state hash matches invocation`);
+    assertEq(before.authoritativeHash, invocationBefore.authoritativeHash,
+      `round ${round} ${toolName} handler authoritative hash matches invocation`);
+    if (payload?.error)
+      assertEq(after.snapshot, invocationBefore.snapshot,
+        `round ${round} ${toolName} failed invocation rollback`);
     trace.push({ round, kind: "tool", toolName, input, invocationId: r.invocationId,
       status: r.status, matched: r.matched,
+      invocationStateHashBefore: invocationBefore.stateHash,
+      invocationAuthoritativeHashBefore: invocationBefore.authoritativeHash,
+      invocationSnapshotBefore: invocationBefore.snapshot,
       stateHashBefore: before.stateHash, stateHashAfter: after.stateHash,
       authoritativeHashBefore: before.authoritativeHash,
       authoritativeHashAfter: after.authoritativeHash,
       snapshotBefore: before.snapshot, snapshotAfter: after.snapshot,
-      ms: Date.now() - t0, payload: text ? JSON.parse(text) : null });
+      ms: Date.now() - t0, payload });
     if (text?.includes("CANARY_")) throw new Error(`round ${round}: canary leak`);
-    return { r, p: text ? JSON.parse(text) : null };
+    return { r, p: payload };
   };
   const humanExpression = async (round, field, expr) => {
     const selector = `#grid input[data-field="${field}"]`;
@@ -1032,10 +1044,24 @@ async function e2e(baseUrl) {
     assertEq(inputOnly12.expressionAfter, "user.managerId", "round12 input-only edit is initially uncommitted");
     assertEq(inputOnly12.inputValue, inputOnlyExpression, "round12 input-only draft is visible");
     assertEq(inputOnly12.active, true, "round12 input-only draft keeps focus");
-    const beforePureRead12 = await s.evalJs(`({
-      snapshot: JSON.stringify(window.__imw.snapshot()),
-      toolSnapshotBefore: JSON.stringify(window.__imw.toolSnapshotBefore()),
-    })`);
+    const beforePureRead12 = await s.evalJs(`(() => {
+      const input = document.querySelector('#expression-managerId');
+      const error = document.querySelector('#expression-error-managerId');
+      return {
+        snapshot: JSON.stringify(window.__imw.snapshot()),
+        ui: JSON.stringify(window.__imw.ui()),
+        toolSnapshotBefore: JSON.stringify(window.__imw.toolSnapshotBefore()),
+        inputValue: input.value,
+        ariaInvalid: input.getAttribute('aria-invalid'),
+        errorHidden: error.hidden,
+        errorText: error.textContent,
+        active: document.activeElement === input,
+        revisionBadge: document.querySelector('#rev-badge').textContent,
+        packetText: document.querySelector('#packet-state').textContent,
+        applyDisabled: document.querySelector('#apply').disabled,
+        staleBannerHidden: document.querySelector('#stale-banner').hidden,
+      };
+    })()`);
     const pureRead12 = await call(12, "read_mapping_session", {});
     assertEq(pureRead12.p.revision, 26, "round12 read leaves input-only edit uncommitted");
     assertEq(pureRead12.p.fields.find((field) => field.field === "managerId")?.expr,
@@ -1061,16 +1087,77 @@ async function e2e(baseUrl) {
     assertEq(await s.evalJs('document.querySelector("#rev-badge").textContent'), "r26",
       "round12 revision badge stays unchanged after read");
 
-    const flushed12 = await call(12, "find_mapping_counterexample",
-      { expectedRevision: 26 }, { draftFlush: true });
-    assertEq(flushed12.p.error.code, "REVISION_MISMATCH",
-      "round12 non-read tool rejects the revision made stale by its draft flush");
-    assertEq(flushed12.p.error.currentRevision, 27,
-      "round12 non-read tool reports the flushed revision");
-    assertEq(await s.evalJs("window.__imw.state().expressions.managerId"), inputOnlyExpression,
-      "round12 non-read tool flushes the input-only expression");
-    assertEq(await s.evalJs('document.querySelector("#rev-badge").textContent'), "r27",
-      "round12 revision badge shows flushed revision");
+    const failedNonRead12 = await call(12, "find_mapping_counterexample",
+      { expectedRevision: 26 });
+    assertEq(failedNonRead12.p, {
+      error: {
+        code: "UNCOMMITTED_DRAFT",
+        reason: UNCOMMITTED_DRAFT_REASON,
+        fields: ["managerId"],
+      },
+    }, "round12 non-read tool rejects the visible input-only draft exactly");
+    const afterFailedNonRead12 = await s.evalJs(`(() => {
+      const input = document.querySelector('#expression-managerId');
+      const error = document.querySelector('#expression-error-managerId');
+      return {
+        snapshot: JSON.stringify(window.__imw.snapshot()),
+        ui: JSON.stringify(window.__imw.ui()),
+        toolSnapshotBefore: JSON.stringify(window.__imw.toolSnapshotBefore()),
+        inputValue: input.value,
+        ariaInvalid: input.getAttribute('aria-invalid'),
+        errorHidden: error.hidden,
+        errorText: error.textContent,
+        active: document.activeElement === input,
+        sameInputNode: input === window.__inputOnlyNode,
+        revisionBadge: document.querySelector('#rev-badge').textContent,
+        packetText: document.querySelector('#packet-state').textContent,
+        applyDisabled: document.querySelector('#apply').disabled,
+        staleBannerHidden: document.querySelector('#stale-banner').hidden,
+      };
+    })()`);
+    for (const [key, value] of Object.entries(beforePureRead12)) {
+      if (key === "toolSnapshotBefore") continue;
+      assertEq(afterFailedNonRead12[key], value,
+        `round12 failed non-read call preserves ${key}`);
+    }
+    assertEq(afterFailedNonRead12.sameInputNode, true,
+      "round12 failed non-read call does not rebuild the input DOM");
+    const failedHandlerSnapshot12 = JSON.parse(afterFailedNonRead12.toolSnapshotBefore);
+    assertEq(failedHandlerSnapshot12, JSON.parse(beforePureRead12.snapshot),
+      "round12 rejected non-read trace keeps invocation and handler boundaries equal");
+
+    const committedInputOnly12 = await humanExpression(12, "managerId", inputOnlyExpression);
+    assertEq(committedInputOnly12.revisionAfter, 27,
+      "round12 human change commits the visible draft at r27");
+    assertEq(committedInputOnly12.expressionAfter, inputOnlyExpression,
+      "round12 human change commits the input-only expression");
+    assertEq(committedInputOnly12.ariaInvalid, "false",
+      "round12 human change leaves the committed expression valid");
+    assertEq(committedInputOnly12.errorHidden, true,
+      "round12 human change leaves no expression error");
+    assertEq(committedInputOnly12.active, true,
+      "round12 human change preserves input focus");
+
+    const reread12 = await call(12, "read_mapping_session", {});
+    assertEq(reread12.p.revision, 27,
+      "round12 read after the human commit returns r27");
+    assertEq(reread12.p.fields.find((field) => field.field === "managerId")?.expr,
+      inputOnlyExpression, "round12 read after the human commit returns the committed expression");
+
+    const nextIdBeforeRetry12 = await s.evalJs("window.__imw.snapshot().nextId");
+    const successfulNonRead12 = await call(12, "find_mapping_counterexample",
+      { expectedRevision: 27 });
+    assertEq(successfulNonRead12.p.cleanSweep, true,
+      "round12 non-read succeeds after the human commits and re-reads");
+    assertEq(await s.evalJs(`({
+      revision: window.__imw.state().revision,
+      expression: window.__imw.state().expressions.managerId,
+      nextId: window.__imw.snapshot().nextId,
+    })`), {
+      revision: 27,
+      expression: inputOnlyExpression,
+      nextId: nextIdBeforeRetry12 + 1,
+    }, "round12 successful non-read runs once without recommitting the human draft");
 
     const sha = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
     const configuredTrace = process.env.IMW_E2E_TRACE_PATH;

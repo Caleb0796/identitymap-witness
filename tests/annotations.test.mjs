@@ -8,14 +8,31 @@ const INVARIANT_ID = { type: "string", minLength: 1, maxLength: 64 };
 const RULE_TEXT = { type: "string", minLength: 1, maxLength: 128 };
 const PERSONA_ID = { type: "string", minLength: 1, maxLength: 64 };
 const EXPECTED_TOOL_DESCRIPTIONS = {
-  read_mapping_session: "Read the current unsaved mapping session. Returns the revision, source priority, page-committed draft field expressions, confirmed pin ids, pending rule ids/version, and persona count; never returns profile values. Use the returned revision as expectedRevision for every other tool, and re-read after human confirmation or edits.",
-  stage_mapping_invariants: "Stage the complete proposed invariant set for visible human review. expectedRevision must match the current session. Staging does not confirm, persist, or change revision; later confirmation replaces the pinned set. Returns pending ids/version/digest. On success, stop for the human to choose Confirm all or Discard, then re-read.",
-  find_mapping_counterexample: "Evaluate all synthetic personas (eight in this fixture) against confirmed invariants at expectedRevision. Returns canonical minimum witness personaIds, every violation row, scope/fullSweep flags, and one closing evidence id; records evidence but never edits the draft. Requires a nonempty confirmed/selected set. After any human edit, re-read and re-find because old evidence becomes stale.",
-  preview_mapping_patch: "Evaluate one candidate expr for field on the named personaIds at expectedRevision without editing the draft. Returns identity-minimized diffs, remaining violations for that field within those personas, and a non-closing preview evidence id. Use persona ids returned by find_mapping_counterexample; UNKNOWN_PERSONA identifies a bad id. The human makes any edit in the page.",
-  prepare_mapping_review: "Create a review packet at expectedRevision from evidenceIds. Empty, missing, or stale ids fail. Only current counterexample or clean-sweep evidence closes pins; preview evidence never does. Returns coverage and blockers and records a packet. A fresh packet with blockers:[] enables Apply mapping (manual page control); this tool never applies or sends anything.",
+  read_mapping_session: "Read the current unsaved mapping session. Normally returns all page-committed expressions and metadata. If that JSON exceeds the output budget, returns an exact JSON sessionChunk plus a continuation; concatenate chunks and pass each returned continuation in order. Changing or skipping a cursor can yield incomplete JSON. Continuations fence revision and pending version. Never returns profile values or changes state. Use its revision for every other tool.",
+  stage_mapping_invariants: "Stage the complete proposed invariant set for visible human review. expectedRevision must match the current session. Staging does not confirm, persist, or change revision; later confirmation replaces the pinned set. Returns pending ids/version/digest. On success, stop for the human to choose Confirm all or Discard, then re-read. If UNCOMMITTED_DRAFT, ask the human to blur or revert the visible edits, then re-read.",
+  find_mapping_counterexample: "Evaluate all synthetic personas (eight in this fixture) against confirmed invariants at expectedRevision. Returns canonical minimum witness personaIds, every violation row, scope/fullSweep flags, and one closing evidence id; records evidence but never edits the draft. Requires a nonempty confirmed/selected set. After any human edit, re-read and re-find because old evidence becomes stale. If UNCOMMITTED_DRAFT, ask the human to blur or revert the visible edits, then re-read.",
+  preview_mapping_patch: "Evaluate one candidate expr for field on the named personaIds at expectedRevision without editing the draft. Returns identity-minimized diffs, remaining violations for that field within those personas, and a non-closing preview evidence id. Use persona ids returned by find_mapping_counterexample; UNKNOWN_PERSONA identifies a bad id. The human makes any edit in the page. If UNCOMMITTED_DRAFT, ask the human to blur or revert the visible edits, then re-read.",
+  prepare_mapping_review: "Create a review packet at expectedRevision from evidenceIds. Empty, missing, or stale ids fail. Only current counterexample or clean-sweep evidence closes pins; preview evidence never does. Returns coverage and blockers and records a packet. A fresh packet with blockers:[] enables Apply mapping (manual page control); this tool never applies or sends anything. If UNCOMMITTED_DRAFT, ask the human to blur or revert the visible edits, then re-read.",
 };
 const EXPECTED_SCHEMAS = {
-  read_mapping_session: { type: "object", properties: {}, additionalProperties: false },
+  read_mapping_session: {
+    type: "object",
+    properties: {
+      continuation: {
+        type: "object",
+        properties: {
+          expectedRevision: EXPECTED_REVISION,
+          expectedPendingVersion: {
+            type: ["integer", "null"], minimum: 1, maximum: Number.MAX_SAFE_INTEGER,
+          },
+          offset: { type: "integer", minimum: 0, maximum: 32_768 },
+        },
+        required: ["expectedRevision", "expectedPendingVersion", "offset"],
+        additionalProperties: false,
+      },
+    },
+    additionalProperties: false,
+  },
   stage_mapping_invariants: {
     type: "object",
     properties: {

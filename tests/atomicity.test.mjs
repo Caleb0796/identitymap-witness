@@ -33,15 +33,23 @@ function assertFailedAtomically(store, personas, name, args, code) {
   return result;
 }
 
+test("oversized read returns a bounded page without changing or rebinding state", async () => {
+  const personas = await load("personas.json");
+  const store = createStore({ ...GOLDEN_STATE, pins: [LONG_PIN] });
+  const stateBefore = store.getState();
+  const textBefore = stateText(store);
+  const result = runTool(store, personas, "read_mapping_session", {});
+
+  assert.equal(result.ok, true);
+  assert.equal(result.payload.encoding, "json");
+  assert.ok(result.payload.continuation);
+  assert.equal(JSON.stringify(result.payload).length <= 1_500, true);
+  assert.equal(store.getState(), stateBefore);
+  assert.equal(stateText(store), textBefore);
+});
+
 test("every reachable failed tool result leaves the store byte-identical", async (t) => {
   const personas = await load("personas.json");
-
-  await t.test("read: output-budget EVALUATOR_FAILED", () => {
-    const store = createStore({ ...GOLDEN_STATE, pins: [LONG_PIN] });
-    const stateBefore = store.getState();
-    assertFailedAtomically(store, personas, "read_mapping_session", {}, "EVALUATOR_FAILED");
-    assert.equal(store.getState(), stateBefore, "failed read rebound the store state");
-  });
 
   for (const [name, args] of [
     ["stage_mapping_invariants", { expectedRevision: 99, invariants: PINS }],

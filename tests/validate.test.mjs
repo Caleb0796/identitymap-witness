@@ -298,6 +298,15 @@ test("all five tools reject non-JSON shapes, wrong types, and unexpected propert
   const cases = [
     ["read extra", "read_mapping_session", { extra: true }],
     ["read array", "read_mapping_session", []],
+    ["read incomplete continuation", "read_mapping_session", {
+      continuation: { expectedRevision: 17, expectedPendingVersion: null },
+    }],
+    ["read continuation extra", "read_mapping_session", {
+      continuation: { expectedRevision: 17, expectedPendingVersion: null, offset: 0, extra: true },
+    }],
+    ["read continuation pending version", "read_mapping_session", {
+      continuation: { expectedRevision: 17, expectedPendingVersion: 0, offset: 0 },
+    }],
     ["stage extra", "stage_mapping_invariants", { expectedRevision: 17, invariants: [PINS[0]], extra: true }],
     ["stage wrong", "stage_mapping_invariants", { expectedRevision: 17, invariants: "rules" }],
     ["find extra", "find_mapping_counterexample", { expectedRevision: 17, extra: true }],
@@ -383,6 +392,32 @@ test("runtime limits accept exact boundaries and reject one over", async (t) => 
       expectedRevision: 17, field: "group", expr: `${exact}x`, personaIds: ["P1"],
     });
     assert.equal(rejected.error.code, "INVALID_INPUT");
+  });
+
+  await t.test("read continuation", () => {
+    const expressions = Object.fromEntries(Object.keys(GOLDEN_STATE.expressions)
+      .map((field) => [field, `"${"x".repeat(510)}"`]));
+    const store = createStore({
+      ...GOLDEN_STATE,
+      expressions,
+    });
+    const first = runTool(store, personas, "read_mapping_session", {});
+    const continuation = first.payload.continuation;
+    assert.ok(continuation);
+    const at = runTool(store, personas, "read_mapping_session", {
+      continuation: { ...continuation, offset: 32_768 },
+    });
+    assert.deepEqual(at.error, {
+      code: "INVALID_INPUT",
+      reason: "continuation offset exceeds session length",
+    });
+    const over = runTool(store, personas, "read_mapping_session", {
+      continuation: { ...continuation, offset: 32_769 },
+    });
+    assert.deepEqual(over.error, {
+      code: "INVALID_INPUT",
+      reason: "continuation offset is outside its limit",
+    });
   });
 
   await t.test("invariant id array", () => {

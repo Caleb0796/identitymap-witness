@@ -2,8 +2,9 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MIME = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript",
   ".css": "text/css", ".json": "application/json", ".png": "image/png",
@@ -66,7 +67,7 @@ export function startServer(port = 0) {
   return new Promise((resolve) => server.listen(port, "127.0.0.1", () => resolve({ server, port: server.address().port })));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const { port } = await startServer(Number(process.env.PORT ?? 4173));
   console.log(`serving ${ROOT} at http://127.0.0.1:${port}/`);
 }

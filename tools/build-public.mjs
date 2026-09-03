@@ -51,7 +51,7 @@ export async function buildPublic(outputPath) {
   return [...files].sort();
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const output = process.argv[2];
   if (!output) throw new Error("usage: node tools/build-public.mjs <output-directory>");
   const files = await buildPublic(output);

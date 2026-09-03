@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { parse } from "../src/engine/parser.mjs";
 import { createStore } from "../src/store/reducer.mjs";
 import { GOLDEN_STATE, runTool } from "../src/tools/defs.mjs";
+import { MAX_READ_SESSION_CHARS } from "../src/tools/validate.mjs";
 
 const load = async (f) => JSON.parse(await readFile(new URL(`../data/${f}`, import.meta.url)));
 const PINS = [
@@ -55,6 +57,135 @@ test("happy path: read → stage → find → preview → prepare", async () => 
   assert.ok(prep.ok);
   // fresh evidence covers all pins, but the golden draft still violates them
   assert.deepEqual(prep.payload.blockers.map((b) => b.reason).sort(), ["violating", "violating", "violating"]);
+});
+
+test("oversized reads expose an exact session-bound JSON continuation", async () => {
+  const personas = await load("personas.json");
+  const expressions = Object.fromEntries(
+    Object.keys(GOLDEN_STATE.expressions).map((field) => [field, `"${"\u0000".repeat(510)}"`]),
+  );
+  for (const expr of Object.values(expressions)) {
+    assert.equal(expr.length, 512);
+    assert.doesNotThrow(() => parse(expr));
+  }
+  const pins = Array.from({ length: 8 }, (_, index) => ({
+    id: `${"\u0000".repeat(63)}${index}`,
+    type: "forbidden_group",
+    personaCategory: "contractor",
+    group: "employees",
+  }));
+  const pending = Array.from({ length: 8 }, (_, index) => ({
+    ...pins[index],
+    id: `${"\u0001".repeat(63)}${index}`,
+  }));
+  const revision = Number.MAX_SAFE_INTEGER;
+  const store = createStore({ ...GOLDEN_STATE, revision, expressions, pins });
+  store.dispatch({ type: "STAGE_RULES", rules: pending });
+  const before = JSON.stringify(store.snapshot());
+  let page = runTool(store, personas, "read_mapping_session", {});
+
+  let serialized = "";
+  let pages = 0;
+  while (page) {
+    assert.equal(page.ok, true);
+    assert.equal(page.payload.revision, revision);
+    assert.equal(page.payload.encoding, "json");
+    assert.equal(page.payload.offset, serialized.length);
+    assert.equal(JSON.stringify(page.payload).length <= 1_500, true);
+    serialized += page.payload.sessionChunk;
+    pages += 1;
+    page = page.payload.continuation
+      ? runTool(store, personas, "read_mapping_session", { continuation: page.payload.continuation })
+      : null;
+  }
+
+  assert.equal(serialized.length, 21_808);
+  assert.equal(serialized.length <= MAX_READ_SESSION_CHARS, true);
+  assert.equal(pages, 43);
+  assert.deepEqual(JSON.parse(serialized), {
+    revision,
+    priority: GOLDEN_STATE.priority,
+    fields: Object.entries(expressions).map(([field, expr]) => ({ field, expr, defectFree: null })),
+    pinIds: pins.map((pin) => pin.id),
+    pendingRuleIds: pending.map((pin) => pin.id),
+    pendingVersion: 1,
+    personaCount: 8,
+  });
+  assert.equal(JSON.stringify(store.snapshot()), before);
+});
+
+test("read continuation rejects a changed revision before returning a chunk", async () => {
+  const personas = await load("personas.json");
+  const store = createStore({
+    ...GOLDEN_STATE,
+    expressions: Object.fromEntries(Object.keys(GOLDEN_STATE.expressions)
+      .map((field) => [field, `"${"x".repeat(510)}"`])),
+  });
+  const first = runTool(store, personas, "read_mapping_session", {});
+  assert.ok(first.payload.continuation);
+  assert.equal(first.payload.continuation.offset, 512);
+  store.dispatch({ type: "EDIT_EXPRESSION", field: "group", expr: '"changed"' });
+  const result = runTool(store, personas, "read_mapping_session", {
+    continuation: first.payload.continuation,
+  });
+  assert.deepEqual(result, {
+    ok: false,
+    error: { code: "REVISION_MISMATCH", currentRevision: 18 },
+  });
+});
+
+test("read continuation rejects same-revision drift and forged Unicode offsets", async () => {
+  const personas = await load("personas.json");
+  const expressions = {
+    ...GOLDEN_STATE.expressions,
+    displayName: `"😀${"x".repeat(508)}"`,
+    group: `"${"x".repeat(510)}"`,
+    managerId: `"${"x".repeat(510)}"`,
+    department: `"${"x".repeat(510)}"`,
+    email: `"${"x".repeat(510)}"`,
+  };
+  const store = createStore({ ...GOLDEN_STATE, expressions });
+  const first = runTool(store, personas, "read_mapping_session", {});
+  assert.ok(first.payload.continuation);
+  const serialized = JSON.stringify({
+    revision: 17,
+    priority: GOLDEN_STATE.priority,
+    fields: Object.entries(expressions).map(([field, expr]) => ({ field, expr, defectFree: null })),
+    pinIds: [],
+    pendingRuleIds: [],
+    pendingVersion: null,
+    personaCount: 8,
+  });
+  const lowSurrogateOffset = serialized.indexOf("😀") + 1;
+  const split = runTool(store, personas, "read_mapping_session", {
+    continuation: { ...first.payload.continuation, offset: lowSurrogateOffset },
+  });
+  assert.deepEqual(split, {
+    ok: false,
+    error: { code: "INVALID_INPUT", reason: "continuation offset splits a Unicode character" },
+  });
+
+  for (const offset of [513, 511]) {
+    const noncanonical = runTool(store, personas, "read_mapping_session", {
+      continuation: { ...first.payload.continuation, offset },
+    });
+    assert.deepEqual(noncanonical, {
+      ok: false,
+      error: { code: "INVALID_INPUT", reason: "continuation offset is not a page boundary" },
+    });
+  }
+
+  store.dispatch({ type: "STAGE_RULES", rules: [PINS[0]] });
+  const drifted = runTool(store, personas, "read_mapping_session", {
+    continuation: first.payload.continuation,
+  });
+  assert.deepEqual(drifted, {
+    ok: false,
+    error: {
+      code: "INVALID_INPUT",
+      reason: "continuation no longer matches the current session — restart read_mapping_session",
+    },
+  });
 });
 
 test("REVISION_MISMATCH carries currentRevision on every fenced tool", async () => {

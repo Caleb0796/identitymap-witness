@@ -8,23 +8,27 @@ const TOOL_NAMES = new Set([
   "preview_mapping_patch",
   "prepare_mapping_review",
 ]);
+const OUTPUT_FIELDS = ["displayName", "group", "managerId", "department", "email"];
+const UNCOMMITTED_DRAFT_REASON = "visible expression drafts must be committed or reverted by the human before running this tool; then call read_mapping_session again";
 const TOOL_ERROR_CODES = {
-  read_mapping_session: new Set(["ABORTED", "EVALUATOR_FAILED", "INVALID_INPUT", "PII_GUARD"]),
+  read_mapping_session: new Set([
+    "ABORTED", "EVALUATOR_FAILED", "INVALID_INPUT", "PII_GUARD", "REVISION_MISMATCH",
+  ]),
   stage_mapping_invariants: new Set([
     "ABORTED", "BAD_RULE", "EVALUATOR_FAILED", "INVALID_INPUT", "PENDING_EXISTS", "PII_GUARD",
-    "REVISION_MISMATCH",
+    "REVISION_MISMATCH", "UNCOMMITTED_DRAFT",
   ]),
   find_mapping_counterexample: new Set([
     "ABORTED", "BAD_RULE", "EVALUATOR_FAILED", "INVALID_INPUT", "NO_INVARIANTS", "PII_GUARD",
-    "REVISION_MISMATCH", "WITNESS_EXCEEDS_CAP",
+    "REVISION_MISMATCH", "UNCOMMITTED_DRAFT", "WITNESS_EXCEEDS_CAP",
   ]),
   preview_mapping_patch: new Set([
     "ABORTED", "EVALUATOR_FAILED", "INVALID_AST", "INVALID_INPUT", "PII_GUARD",
-    "REVISION_MISMATCH", "UNKNOWN_PERSONA",
+    "REVISION_MISMATCH", "UNCOMMITTED_DRAFT", "UNKNOWN_PERSONA",
   ]),
   prepare_mapping_review: new Set([
     "ABORTED", "EVALUATOR_FAILED", "INVALID_INPUT", "NO_EVIDENCE", "NO_INVARIANTS", "PII_GUARD",
-    "REVISION_MISMATCH", "STALE_EVIDENCE",
+    "REVISION_MISMATCH", "STALE_EVIDENCE", "UNCOMMITTED_DRAFT",
   ]),
 };
 const SNAPSHOT_KEYS = ["nextId", "nextPendingVersion", "state"];
@@ -32,6 +36,28 @@ const STATE_KEYS = ["evidence", "expressions", "packets", "pending", "pins", "pr
 const READ_PAYLOAD_KEYS = [
   "fields", "pendingRuleIds", "pendingVersion", "personaCount", "pinIds", "priority", "revision",
 ];
+const READ_PAGE_KEYS = [
+  "continuation", "encoding", "offset", "revision", "sessionChunk", "sessionLength",
+];
+const READ_CONTINUATION_KEYS = ["expectedPendingVersion", "expectedRevision", "offset"];
+const MAX_OUTPUT_CHARS = 1500;
+const READ_SESSION_CHUNK_CHARS = 512;
+const readSessionChunkEnd = (serialized, offset) => {
+  let end = Math.min(offset + READ_SESSION_CHUNK_CHARS, serialized.length);
+  if (end < serialized.length
+      && /[\uD800-\uDBFF]/.test(serialized[end - 1])
+      && /[\uDC00-\uDFFF]/.test(serialized[end])) end -= 1;
+  return end;
+};
+const isReadSessionContinuationOffset = (serialized, offset) => {
+  let boundary = readSessionChunkEnd(serialized, 0);
+  while (boundary < serialized.length) {
+    if (boundary === offset) return true;
+    if (boundary > offset) return false;
+    boundary = readSessionChunkEnd(serialized, boundary);
+  }
+  return false;
+};
 const STAGE_PAYLOAD_KEYS = [
   "digest", "nextStep", "pendingRuleIds", "pendingVersion", "revision", "status",
 ];
@@ -111,7 +137,7 @@ function validRule(rule) {
   if (!Object.values(rule).every((value) => typeof value === "string"
       && value.length > 0 && !value.includes("CANARY_"))) return false;
   if (hasOwn(rule, "field")
-      && !["displayName", "group", "managerId", "department", "email"].includes(rule.field)) return false;
+      && !OUTPUT_FIELDS.includes(rule.field)) return false;
   if (hasOwn(rule, "source") && !["okta", "hris", "ad"].includes(rule.source)) return false;
   return true;
 }
@@ -220,7 +246,7 @@ function validProtocol(entry) {
     && isJsonValue(entry.payload);
 }
 
-function validErrorDetails(error, entry, after) {
+function validErrorDetails(error, entry, handlerBefore) {
   const keys = Object.keys(error).sort();
   const reasonEnvelope = same(keys, ["code", "reason"])
     && typeof error.reason === "string" && error.reason.length > 0;
@@ -238,24 +264,31 @@ function validErrorDetails(error, entry, after) {
       return reasonEnvelope;
     case "PENDING_EXISTS":
       return reasonEnvelope
-        && after.state.pending !== null
+        && handlerBefore.state.pending !== null
         && error.reason === "different rules are already awaiting human review — the human must confirm or discard them first";
+    case "UNCOMMITTED_DRAFT":
+      return same(keys, ["code", "fields", "reason"])
+        && error.reason === UNCOMMITTED_DRAFT_REASON
+        && Array.isArray(error.fields) && error.fields.length > 0
+        && new Set(error.fields).size === error.fields.length
+        && error.fields.every((field) => OUTPUT_FIELDS.includes(field))
+        && rawSame(error.fields, OUTPUT_FIELDS.filter((field) => error.fields.includes(field)));
     case "NO_INVARIANTS": {
-      const emptySelection = after.state.pins.length > 0
+      const emptySelection = handlerBefore.state.pins.length > 0
         && entry.toolName === "find_mapping_counterexample"
         && Array.isArray(entry.input?.invariantIds)
         && entry.input.invariantIds.length === 0;
-      const noEffectivePins = after.state.pins.length === 0 || emptySelection;
+      const noEffectivePins = handlerBefore.state.pins.length === 0 || emptySelection;
       const expectedReason = emptySelection
         ? "no invariants selected — omit invariantIds to check all confirmed rules, or pass confirmed ids returned by read_mapping_session"
-        : after.state.pending
+        : handlerBefore.state.pending
           ? "no confirmed invariants — pending rules await confirmation by the human"
           : "no confirmed invariants — call stage_mapping_invariants with the complete rule set, ask the human to Confirm all, then call read_mapping_session";
       return reasonEnvelope && noEffectivePins && error.reason === expectedReason;
     }
     case "REVISION_MISMATCH":
       return same(keys, ["code", "currentRevision"])
-        && error.currentRevision === after.state.revision;
+        && error.currentRevision === handlerBefore.state.revision;
     case "INVALID_AST":
       return same(keys, ["code", "position", "reason"])
         && typeof error.reason === "string" && error.reason.length > 0
@@ -274,7 +307,7 @@ function validErrorDetails(error, entry, after) {
     case "NO_EVIDENCE":
       return reasonEnvelope
         && error.reason === "no evidence ids supplied — run find_mapping_counterexample at the current revision and pass its evidenceIds"
-        && after.state.pins.length > 0
+        && handlerBefore.state.pins.length > 0
         && Array.isArray(entry.input?.evidenceIds)
         && entry.input.evidenceIds.length === 0;
     default:
@@ -282,12 +315,12 @@ function validErrorDetails(error, entry, after) {
   }
 }
 
-function validErrorEnvelope(payload, entry, after) {
+function validErrorEnvelope(payload, entry, handlerBefore) {
   return same(Object.keys(payload).sort(), ["error"])
     && isObject(payload.error)
     && typeof payload.error.code === "string"
     && TOOL_ERROR_CODES[entry.toolName]?.has(payload.error.code)
-    && validErrorDetails(payload.error, entry, after);
+    && validErrorDetails(payload.error, entry, handlerBefore);
 }
 
 function expectedPayloadKeys(base, payload) {
@@ -334,7 +367,7 @@ function validFindPayload(payload) {
 
 function validPreviewPayload(payload) {
   return same(Object.keys(payload).sort(), PREVIEW_PAYLOAD_KEYS)
-    && ["displayName", "group", "managerId", "department", "email"].includes(payload.field)
+    && OUTPUT_FIELDS.includes(payload.field)
     && typeof payload.evidenceId === "string" && payload.evidenceId.length > 0
     && Number.isInteger(payload.remainingViolations) && payload.remainingViolations >= 0
     && Array.isArray(payload.diffs)
@@ -360,6 +393,72 @@ function validPreparePayload(payload) {
     && ["uncovered", "violating"].includes(blocker.reason));
 }
 
+function expectedReadPayload(snapshot) {
+  return {
+    revision: snapshot.state.revision,
+    priority: snapshot.state.priority,
+    fields: Object.entries(snapshot.state.expressions)
+      .map(([field, expr]) => ({ field, expr, defectFree: null })),
+    pinIds: snapshot.state.pins.map((rule) => rule.id),
+    pendingRuleIds: snapshot.state.pending?.rules.map((rule) => rule.id) ?? [],
+    pendingVersion: snapshot.state.pending?.version ?? null,
+    personaCount: 8,
+  };
+}
+
+function validReadContinuation(continuation, revision, pendingVersion, offset) {
+  return isObject(continuation)
+    && same(Object.keys(continuation).sort(), READ_CONTINUATION_KEYS)
+    && continuation.expectedRevision === revision
+    && continuation.expectedPendingVersion === pendingVersion
+    && continuation.offset === offset;
+}
+
+function validReadPayload(entry, after) {
+  const payload = entry.payload;
+  const expected = expectedReadPayload(after);
+  const serialized = JSON.stringify(expected);
+  if (same(Object.keys(payload).sort(), READ_PAYLOAD_KEYS))
+    return serialized.length <= MAX_OUTPUT_CHARS && rawSame(payload, expected);
+  if (!same(Object.keys(payload).sort(), READ_PAGE_KEYS)
+      || payload.encoding !== "json"
+      || !Number.isInteger(payload.offset) || payload.offset < 0
+      || payload.sessionLength !== serialized.length
+      || typeof payload.sessionChunk !== "string"
+      || JSON.stringify(payload).length > MAX_OUTPUT_CHARS) return false;
+
+  const pendingVersion = after.state.pending?.version ?? null;
+  let expectedOffset;
+  if (isObject(entry.input) && Object.keys(entry.input).length === 0) {
+    if (serialized.length <= MAX_OUTPUT_CHARS) return false;
+    expectedOffset = 0;
+  } else if (isObject(entry.input)
+      && same(Object.keys(entry.input).sort(), ["continuation"])
+      && validReadContinuation(
+        entry.input.continuation,
+        after.state.revision,
+        pendingVersion,
+        entry.input.continuation?.offset,
+      )) {
+    expectedOffset = entry.input.continuation.offset;
+  } else {
+    return false;
+  }
+  if (expectedOffset >= serialized.length || payload.offset !== expectedOffset) return false;
+  if (expectedOffset > 0
+      && /[\uD800-\uDBFF]/.test(serialized[expectedOffset - 1])
+      && /[\uDC00-\uDFFF]/.test(serialized[expectedOffset])) return false;
+  if (hasOwn(entry.input, "continuation")
+      && !isReadSessionContinuationOffset(serialized, expectedOffset)) return false;
+
+  const end = readSessionChunkEnd(serialized, expectedOffset);
+  const continuation = end < serialized.length
+    ? { expectedRevision: after.state.revision, expectedPendingVersion: pendingVersion, offset: end }
+    : null;
+  return payload.sessionChunk === serialized.slice(expectedOffset, end)
+    && rawSame(payload.continuation, continuation);
+}
+
 function validSuccessEnvelope(entry, after) {
   const payload = entry.payload;
   if (hasOwn(payload, "error")
@@ -367,14 +466,7 @@ function validSuccessEnvelope(entry, after) {
       || payload.revision !== after.state.revision) return false;
   switch (entry.toolName) {
     case "read_mapping_session":
-      return same(Object.keys(payload).sort(), READ_PAYLOAD_KEYS)
-        && rawSame(payload.priority, after.state.priority)
-        && rawSame(payload.fields, Object.entries(after.state.expressions)
-          .map(([field, expr]) => ({ field, expr, defectFree: null })))
-        && rawSame(payload.pinIds, after.state.pins.map((rule) => rule.id))
-        && rawSame(payload.pendingRuleIds, after.state.pending?.rules.map((rule) => rule.id) ?? [])
-        && payload.pendingVersion === (after.state.pending?.version ?? null)
-        && payload.personaCount === 8;
+      return validReadPayload(entry, after);
     case "stage_mapping_invariants":
       return same(Object.keys(payload).sort(), STAGE_PAYLOAD_KEYS)
         && payload.status === "pending_confirmation"
@@ -443,24 +535,62 @@ export function auditTrace(trace) {
         fail(entry, "recorded hashes do not match the captured snapshot JSON");
     }
 
-    if (!same(authoritative(before), authoritative(after)))
-      fail(entry, "authoritative slice changed during a tool call");
-    if (before.state.revision !== after.state.revision)
-      fail(entry, "revision changed during a tool call");
-    if (hashesValid && entry.authoritativeHashBefore !== entry.authoritativeHashAfter)
-      fail(entry, "authoritative slice hash changed during a tool call");
+    const invocationKeys = [
+      "invocationStateHashBefore",
+      "invocationAuthoritativeHashBefore",
+      "invocationSnapshotBefore",
+    ];
+    const invocationBoundaryValid = (
+      invocationKeys.every((key) => hasOwn(entry, key))
+      && typeof entry.invocationStateHashBefore === "string"
+      && HASH.test(entry.invocationStateHashBefore)
+      && typeof entry.invocationAuthoritativeHashBefore === "string"
+      && HASH.test(entry.invocationAuthoritativeHashBefore)
+      && validSnapshot(entry.invocationSnapshotBefore)
+    );
+    if (!invocationBoundaryValid)
+      fail(entry, "invocation-before boundary must contain a complete typed snapshot and two valid SHA-256 hashes");
+    if (invocationBoundaryValid
+        && (entry.invocationStateHashBefore !== sha256(entry.invocationSnapshotBefore)
+          || entry.invocationAuthoritativeHashBefore
+            !== sha256(authoritative(entry.invocationSnapshotBefore))))
+      fail(entry, "invocation-before hashes do not match the captured snapshot JSON");
+    if (invocationBoundaryValid
+        && (!rawSame(entry.invocationSnapshotBefore, before)
+          || entry.invocationStateHashBefore !== entry.stateHashBefore
+          || entry.invocationAuthoritativeHashBefore !== entry.authoritativeHashBefore))
+      fail(entry, "invocation-before and handler-entry boundaries must be identical");
 
     const errorEnvelopeValid = protocolValid && hasOwn(entry.payload, "error")
-      && validErrorEnvelope(entry.payload, entry, after);
+      && validErrorEnvelope(entry.payload, entry, before);
     const successEnvelopeValid = protocolValid && !hasOwn(entry.payload, "error")
       && validSuccessEnvelope(entry, after);
     if (!errorEnvelopeValid && !successEnvelopeValid)
       fail(entry, "tool payload must be a valid success or error envelope for the named tool");
 
+    const comparisonBefore = !successEnvelopeValid && invocationBoundaryValid
+      ? entry.invocationSnapshotBefore
+      : before;
+    const comparisonStateHashBefore = !successEnvelopeValid
+        && invocationBoundaryValid
+      ? entry.invocationStateHashBefore
+      : entry.stateHashBefore;
+    const comparisonAuthoritativeHashBefore = !successEnvelopeValid
+        && invocationBoundaryValid
+      ? entry.invocationAuthoritativeHashBefore
+      : entry.authoritativeHashBefore;
+    if (!same(authoritative(comparisonBefore), authoritative(after)))
+      fail(entry, "authoritative slice changed during a tool call");
+    if (comparisonBefore.state.revision !== after.state.revision)
+      fail(entry, "revision changed during a tool call");
+    if (hashesValid && invocationBoundaryValid
+        && comparisonAuthoritativeHashBefore !== entry.authoritativeHashAfter)
+      fail(entry, "authoritative slice hash changed during a tool call");
+
     if (!successEnvelopeValid) {
-      const unchanged = rawSame(before, after)
-        && hashesValid
-        && entry.stateHashBefore === entry.stateHashAfter;
+      const unchanged = rawSame(comparisonBefore, after)
+        && hashesValid && invocationBoundaryValid
+        && comparisonStateHashBefore === entry.stateHashAfter;
       if (!unchanged) {
         failedCallHashFailures.push(entry);
         fail(entry, "failed call must leave the full snapshot and hidden counters unchanged");

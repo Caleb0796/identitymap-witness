@@ -31,10 +31,11 @@ rule on an unsaved draft — and the proof dies when you edit what it depended o
 - [`data/oracle.json`](data/oracle.json) is human-audited. Commit `a575653` carries
   the required `Oracle-Audited: yes` trailer.
 - The committed eval bundle contains [`eval/out/report.json`](eval/out/report.json)
-  and its HEAD-bound `relay-<sha>.json` trace. The report's `sha` field names the
-  commit it was produced from and identifies the paired relay trace. Both
-  regenerate with `node eval/run.mjs`.
-- `npm test`: **292 tests, 292 passed, 0 failed, 0 skipped**.
+  and its evaluated-code-bound `relay-<sha>.json` trace. The report's `sha` field
+  names the code commit that was evaluated and identifies the paired trace; the
+  later evidence-only commit that adds that pair therefore has a different HEAD.
+  Both regenerate with `node eval/run.mjs` from a code commit.
+- `npm test`: **310 tests, 310 passed, 0 failed, 0 skipped**.
 - No coverage percentage is claimed.
 
 ## Two-phase judge path
@@ -61,15 +62,20 @@ the demo path.
 
 | tool | authority |
 |---|---|
-| `read_mapping_session` | Read page-committed draft expressions, confirmed rule ids, pending state, and revision; returns no profile values and changes no page or session state. |
+| `read_mapping_session` | Read page-committed draft expressions, confirmed rule ids, pending state, and revision; a small session is returned whole, while an oversized session is returned as ordered, revision- and pending-version-fenced JSON chunks. It returns no profile values and changes no page or session state. |
 | `stage_mapping_invariants` | Stage canonical pending rules for human review; it cannot confirm them. |
 | `find_mapping_counterexample` | Exhaustively find a minimal synthetic witness against confirmed rules. |
 | `preview_mapping_patch` | Preview a redacted patch without mutating the draft. |
 | `prepare_mapping_review` | Build a packet from fresh evidence; coverage and blockers show whether it is complete, and only a fresh blocker-free packet turns GREEN. |
 
+A focused value that has not yet produced a page `change`/blur stays input-only.
+The pure read preserves that visible value, focus, DOM node, and committed session.
+Every non-read tool instead returns `UNCOMMITTED_DRAFT` with the affected fields;
+the human must blur to commit or revert the visible edit, then re-read before retrying.
+
 ## How WebMCP is wired
 
-The production registration leaf is [`app.js:534–540`](app.js#L534-L540):
+The production registration leaf is [`app.js:523–531`](app.js#L523-L531):
 
 ```js
     (definition, options) => document.modelContext.registerTool({
@@ -82,14 +88,17 @@ The production registration leaf is [`app.js:534–540`](app.js#L534-L540):
 ```
 
 When WebMCP and the demo data are available, the page attempts each of the five
-registrations once during initialization; state changes do not re-register them
-because their `execute` closures read the current store, and relevant edits make
-dependent evidence stale.
+registrations once during initialization. All five share one catalog abort signal
+linked to page lifetime: any registration rejection, throw, or lifecycle abort
+cancels the catalog and leaves the app reporting zero usable tools. State changes
+do not re-register tools because their `execute` closures read the current store,
+and relevant edits make dependent evidence stale.
 
 ## Run locally
 
 Node 21 or newer is required because the Chrome relay uses the native WebSocket
-client.
+client. The application has no third-party runtime packages and needs no
+environment variables for its production build.
 
 ```bash
 git clone https://github.com/Caleb0796/identitymap-witness.git
@@ -97,6 +106,21 @@ cd identitymap-witness
 npm test
 node harness/serve.mjs  # `npm run serve` is equivalent
 ```
+
+The local server accepts optional `PORT` (default `4173`). The Chrome relay accepts
+optional `CHROME_BIN`, and `IMW_E2E_TRACE_PATH` can select an absolute output path
+for the E2E trace. Both the local server and public builder are covered when the
+repository path contains spaces.
+
+Render uses the checked-in [`render.yaml`](render.yaml) to run the curated static
+build and publish `public`:
+
+```bash
+node tools/build-public.mjs public
+```
+
+The generated directory contains only the page assets and recursively discovered
+browser-module graph; repository internals are excluded.
 
 With the server running, launch Chrome 152 in a fresh profile with WebMCP enabled:
 

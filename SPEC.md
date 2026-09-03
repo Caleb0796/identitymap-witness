@@ -1,8 +1,11 @@
-# IdentityMap Witness — SPEC (r4, remedy contracts)
+# IdentityMap Witness — SPEC (r5, final-audit contracts)
 
 Authority note: this file + `EVAL.md` + `docs/plans/2026-08-29-identitymap-witness.md`
 are the three authorities. Narrative docs restate them and lose on conflict.
-Deadline: **Devpost 2026-09-03 13:00 PT**. r2 incorporates the 2026-08-29
+The authenticated Devpost submission dashboard showed **13 more hours** at
+2026-09-03 12:25 PT, so the current deadline is approximately
+**2026-09-04 01:00 PT**; the public rules may continue to show the superseded
+time. r2 incorporates the 2026-08-29
 gpt-5.6-sol adversarial review (`reviews/codex-sol-2026-08-29.md`): direction cut,
 defective-by-design golden draft, full tool schemas, fingerprint invalidation,
 honest eval relabeling. r4 changelog — R1: clean sweeps are successful results,
@@ -15,6 +18,12 @@ and untrusted output; R5: review packets carry their evidence ids and become sta
 after the next relevant session edit, disabling Apply until fresh evidence is prepared;
 R7: agents can only stage digest-bound rule proposals, while a human must confirm
 the exact pending version before pins become authoritative and revision advances.
+r5 final-audit changelog: reading is pure even with an input-only draft; non-read
+invocations reject such drafts before handler validation; legal oversized reads
+page exact JSON through ordered revision/pending-version continuations; all five
+registrations share a fail-closed catalog signal; fresh traces capture both
+invocation and handler-entry boundaries; and build/serve entrypoints support paths
+containing spaces.
 
 ## 1. One line
 
@@ -67,7 +76,7 @@ Measured in ~/mcp/outpocket (evidence/V0–V6, harness/drive.mjs) 2026-08-29:
 | C7 | `WebMCP.enable` returns OK with no page API — presence check is the completed round trip, nothing else | drive.mjs |
 | C8 | Registration top-level document only; iframe/worker registration silently does nothing | HANDOVER §3 r11 |
 | C9 | Remote HTTPS origins show a consent gate in the ChatGPT browser; localhost doesn't. Video records against the deployed remote origin, consent click included | V6 |
-| C10 | Registration shape: `await Promise.resolve(document.modelContext.registerTool({name, description, inputSchema, annotations, execute: async (args, {signal}) => ({content:[{type:"text", text}]})}, {signal: pageLifetimeSignal}))`. Registration may return void or a Promise; an already-aborted invocation does not enter a handler, and non-BFCache page teardown aborts the page-lifetime signal | probe/index.html |
+| C10 | Registration shape: `await Promise.resolve(document.modelContext.registerTool({name, description, inputSchema, annotations, execute: async (args, {signal}) => ({content:[{type:"text", text}]})}, {signal: catalogSignal}))`. All five registrations share one catalog signal linked to page lifetime. Registration may return void or a Promise; any registration throw/rejection or lifecycle abort aborts the catalog and resolves to zero usable tools. An already-aborted invocation does not enter a handler | probe/index.html + final-audit harness |
 
 ## 4. Golden state (defective by design — this IS the demo)
 
@@ -164,29 +173,36 @@ Semantics:
 
 ## 7. Tools — complete contracts (5, top-level, no more)
 
-Common rules: input `expectedRevision` required on every tool except
+Common rules: input `expectedRevision` is required on every tool except
 `read_mapping_session`; it is a nonnegative safe integer at most
 `Number.MAX_SAFE_INTEGER`. Application code enforces the contract even if a draft
-WebMCP implementation does not validate JSON Schema. Error precedence is: a
-non-plain/non-JSON top-level input or invalid revision → `INVALID_INPUT`; a valid
-but stale revision → `REVISION_MISMATCH {currentRevision}` before remaining
-arguments; then remaining shape/type/budget validation; then domain validation.
-Tool object schemas reject additional properties. Every
-success payload includes `revision`. One text content item;
-`JSON.stringify(payload).length <= 1500` (over-budget → violations trimmed to ids-only
-and the list capped to fit, with `truncated:true` + `violationsTotal`; irreducibly
-over → `EVALUATOR_FAILED`). Tools with UI effects render BEFORE return;
-`read_mapping_session` performs no render. Every tool has
-`untrustedContentHint:true`; only `read_mapping_session` has `readOnlyHint:true`.
-Output size is a second failure boundary: schema-valid states (e.g. five 512-character expressions) can exceed the 1,500-character payload cap and return EVALUATOR_FAILED rather than a silently truncated draft.
-The other four use `readOnlyHint:false` because they stage pending state or record
-derived evidence/packets. Hints are not security. No apply/save/push tool exists.
-All failed handler executions leave their entry snapshot byte-identical, including
-both hidden allocators. Mutating handlers restore that snapshot; the read handler
-never writes and skips restoration so it also preserves store object identity.
-Before a non-read handler begins, the page wrapper may commit a valid focused
-input-only draft. That preflight synchronization is outside the handler transaction,
-so a later handler failure retains the synchronized page edit.
+WebMCP implementation does not validate JSON Schema. At the browser-invocation
+boundary, every non-read tool first checks for a visible input-only expression
+draft. If one exists it returns `UNCOMMITTED_DRAFT` before handler input or
+revision validation. Otherwise handler error precedence is: a non-plain/non-JSON
+top-level input or invalid revision → `INVALID_INPUT`; a valid but stale revision →
+`REVISION_MISMATCH {currentRevision}` before remaining arguments; then remaining
+shape/type/budget validation; then domain validation. Tool object schemas reject
+additional properties.
+
+Every success payload includes `revision` and returns one text content item with
+`JSON.stringify(payload).length <= 1500`. Non-read over-budget results trim
+violations to ids-only and cap the list, with `truncated:true` plus
+`violationsTotal`; an irreducible non-read result becomes `EVALUATOR_FAILED`.
+`read_mapping_session` instead pages every legal oversized session without losing
+data. Tools with UI effects render BEFORE return; `read_mapping_session` performs
+no render. Every tool has `untrustedContentHint:true`; only
+`read_mapping_session` has `readOnlyHint:true`. The other four use
+`readOnlyHint:false` because they stage pending state or record derived
+evidence/packets. Hints are not security. No apply/save/push tool exists.
+
+All failed handler executions leave their handler-entry snapshot byte-identical,
+including both hidden allocators. Mutating handlers restore that snapshot; the read
+handler never writes and skips restoration so it also preserves store object
+identity. The page wrapper never auto-commits an input-only draft, so a failed
+browser invocation also leaves the invocation-entry session, UI, DOM, and focus
+unchanged. Cancellation is checked before and after the awaited draft guard; an
+aborted call never enters the handler or invokes its result callback.
 
 Caller-controlled limits are: 8 invariants; invariant ids 64 characters; other
 rule text 128; expressions 512; 8 invariant ids; 8 persona ids of 64 characters;
@@ -194,12 +210,33 @@ rule text 128; expressions 512; 8 invariant ids; 8 persona ids of 64 characters;
 All id arrays are unique. These same limits appear in JSON Schema and runtime code.
 
 **read_mapping_session** (readOnly true)
-- in: `{}` — out: `{revision, priority, fields: [{field, expr, defectFree: null}],
-  pinIds: [string], pendingRuleIds: [string], pendingVersion: integer|null, personaCount}`
-  (`defectFree` is always null — the page never grades itself; the agent judges.)
+- in: `{}` or `{continuation: {expectedRevision, expectedPendingVersion,
+  offset}}`. When the redacted session JSON fits the normal output budget, out is
+  `{revision, priority, fields: [{field, expr, defectFree: null}], pinIds:
+  [string], pendingRuleIds: [string], pendingVersion: integer|null,
+  personaCount}`. `defectFree` is always null — the page never grades itself; the
+  agent judges.
+- When the normal JSON would exceed the budget, every response is
+  `{revision, encoding:"json", sessionChunk, offset, sessionLength,
+  continuation}`. Each `sessionChunk` contains at most 512 UTF-16 code units and
+  never splits a surrogate pair. Concatenating chunks and parsing once reproduces
+  the exact redacted normal response. Legal session JSON is capped at 32,768
+  UTF-16 code units, so it is always pageable within the wire budget.
+- A returned continuation fences both revision and pending version, and its offset
+  names the next canonical page boundary. A revision edit returns
+  `REVISION_MISMATCH`; same-revision pending drift and invalid offsets return
+  `INVALID_INPUT`. The cursor is stateless and is not authenticated or a strict
+  sequence proof: callers must pass each returned continuation in order, because
+  changing or skipping to another canonical boundary can yield incomplete JSON.
 - `fields` contains expressions already committed by the page UI. A focused
-  input-only value remains local until a change/blur or a non-read tool preflight;
-  reading does not commit it, rebuild the DOM, or update inspection bookkeeping.
+  input-only value remains local until a human-generated change/blur. Reading does
+  not commit it, rebuild the DOM, change focus, or update inspection bookkeeping.
+
+For each non-read tool, if any visible expression differs from its page-committed
+value, the browser wrapper returns
+`{error:{code:"UNCOMMITTED_DRAFT",reason:"visible expression drafts must be committed or reverted by the human before running this tool; then call read_mapping_session again",fields:[...]}}`.
+`fields` follows canonical output-field order. The human must blur/change to
+commit or revert the visible edit, then re-read before retrying.
 
 **stage_mapping_invariants** (readOnly false — pending proposal only)
 - in: `{expectedRevision, invariants: [{id?, type, ...perTypeFields}]}` (1–8), with
@@ -283,10 +320,10 @@ All id arrays are unique. These same limits appear in JSON Schema and runtime co
   rebinding the state. The read handler never writes and skips restoration, so it
   preserves both bytes and state identity on success or failure. In all cases,
   `revision`, `pins`, `pending`, `evidence`, `packets`, and both hidden counters are
-  exactly as they were at handler entry after a failed handler execution. A non-read
-  WebMCP wrapper may first synchronize a valid focused input-only page draft; that
-  preflight edit precedes the handler snapshot and is not rolled back by a later
-  failure. Incomplete, non-JSON, malformed-rule, digest-mismatched, or
+  exactly as they were at handler entry after a failed handler execution. The
+  browser wrapper performs no draft synchronization: it rejects input-only drafts
+  with `UNCOMMITTED_DRAFT`, so failed calls are also byte-identical at invocation
+  entry. Incomplete, non-JSON, malformed-rule, digest-mismatched, or
   derived-record/allocator-incoherent snapshots are rejected fail-closed.
 - Packet freshness is derived on every render: `packetFresh(pkt, state)` is true
   exactly when `pkt.revision === state.revision` and every id in
@@ -330,7 +367,9 @@ Page sources live at the repo root, while `render.yaml` publishes a generated,
 curated `public` directory containing only `index.html`, `style.css`, `app.js`,
 `data/personas.json`, and the recursively discovered ESM dependency graph. The
 local server enforces the same public asset boundary and rejects repository
-internals. `window.__imw` is a frozen inspection-only test surface: every exposed
+internals. Both CLI entrypoints derive the repository root from `import.meta.url`
+through `fileURLToPath`, so invoking build/serve from a path containing spaces is
+supported. `window.__imw` is a frozen inspection-only test surface: every exposed
 member is a function returning a structured clone. It exposes no store, dispatch,
 restore, renderer, tool runner, mutable personas, or mutable UI object. Real
 expression changes and pending confirm/discard actions are driven through DOM controls.

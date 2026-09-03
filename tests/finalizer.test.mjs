@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createStore } from "../src/store/reducer.mjs";
-import { GOLDEN_STATE, runTool } from "../src/tools/defs.mjs";
+import { createToolExecutor, GOLDEN_STATE, runTool } from "../src/tools/defs.mjs";
 
 const load = async (file) => JSON.parse(await readFile(new URL(`../data/${file}`, import.meta.url)));
 const PINS = [
@@ -28,15 +28,87 @@ function assertFinalEnvelope(result, code) {
   assert.ok(!text.includes("CANARY_"), text.slice(0, 200));
 }
 
+test("oversized read crosses the finalizer as a bounded paged success", async () => {
+  const personas = await load("personas.json");
+  const result = runTool(createStore({ ...GOLDEN_STATE, pins: [LONG_PIN] }), personas,
+    "read_mapping_session", {});
+  assert.equal(result.ok, true);
+  assert.equal(result.payload.encoding, "json");
+  assert.ok(result.payload.continuation);
+  assert.equal(wireText(result).length <= 1_500, true);
+  assert.equal(wireText(result).includes("CANARY_"), false);
+});
+
+test("executor preconditions use the unified finalizer and fail closed", async (t) => {
+  const personas = await load("personas.json");
+  const store = createStore(GOLDEN_STATE);
+  const before = JSON.stringify(store.snapshot());
+  const reason = "visible expression drafts must be committed or reverted by the human before running this tool; then call read_mapping_session again";
+
+  await t.test("exact UNCOMMITTED_DRAFT envelope", async () => {
+    const detail = { code: "UNCOMMITTED_DRAFT", reason, fields: ["group", "email"] };
+    let observed;
+    const execute = createToolExecutor(store, personas, "stage_mapping_invariants",
+      (result) => { observed = result; }, () => detail);
+    const response = await execute({ expectedRevision: 17, invariants: PINS });
+    const text = response.content[0].text;
+
+    assert.deepEqual(JSON.parse(text), { error: detail });
+    assert.deepEqual(observed, { ok: false, error: detail });
+    assert.equal(text.length <= 1_500, true);
+    assert.equal(text.includes("CANARY_"), false);
+    assert.equal(JSON.stringify(store.snapshot()), before);
+  });
+
+  await t.test("hook exception", async () => {
+    let observed;
+    const execute = createToolExecutor(store, personas, "stage_mapping_invariants",
+      (result) => { observed = result; }, () => { throw new Error("CANARY_HOOK_FAILURE"); });
+    const response = await execute({ expectedRevision: 17, invariants: PINS });
+    const text = response.content[0].text;
+
+    assert.deepEqual(JSON.parse(text), {
+      error: { code: "EVALUATOR_FAILED", reason: "<redacted>" },
+    });
+    assert.deepEqual(observed, {
+      ok: false,
+      error: { code: "EVALUATOR_FAILED", reason: "<redacted>" },
+    });
+    assert.equal(text.length <= 1_500, true);
+    assert.equal(text.includes("CANARY_"), false);
+    assert.equal(JSON.stringify(store.snapshot()), before);
+  });
+
+  await t.test("abort while hook is pending", async () => {
+    const controller = new AbortController();
+    let releaseHook;
+    let reportHookStarted;
+    let resultCallbacks = 0;
+    const hookStarted = new Promise((resolve) => { reportHookStarted = resolve; });
+    const execute = createToolExecutor(store, personas, "stage_mapping_invariants",
+      () => { resultCallbacks += 1; }, async () => {
+        reportHookStarted();
+        await new Promise((resolve) => { releaseHook = resolve; });
+      });
+    const pending = execute({ expectedRevision: 17, invariants: PINS }, {
+      signal: controller.signal,
+    });
+
+    await hookStarted;
+    controller.abort();
+    releaseHook();
+
+    assert.deepEqual(await pending, {
+      content: [{ type: "text", text: '{"error":{"code":"ABORTED"}}' }],
+    });
+    assert.equal(resultCallbacks, 0);
+    assert.equal(JSON.stringify(store.snapshot()), before);
+  });
+});
+
 test("every tool's reachable error envelopes cross the unified finalizer", async (t) => {
   const personas = await load("personas.json");
   const cases = [
-    {
-      label: "read: output-budget EVALUATOR_FAILED",
-      code: "EVALUATOR_FAILED",
-      run: () => runTool(createStore({ ...GOLDEN_STATE, pins: [LONG_PIN] }), personas,
-        "read_mapping_session", {}),
-    },
     ...[
       ["stage_mapping_invariants", { expectedRevision: 99, invariants: PINS }],
       ["find_mapping_counterexample", { expectedRevision: 99 }],

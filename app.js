@@ -9,7 +9,7 @@ import { createStore, packetFresh } from "./src/store/reducer.mjs";
 import { validatePersonasFixture } from "./src/engine/personas.mjs";
 import { evaluateAll } from "./src/engine/witness.mjs";
 import { parse } from "./src/engine/parser.mjs";
-import { MAX_EXPRESSION_CHARS } from "./src/tools/validate.mjs";
+import { MAX_EXPRESSION_CHARS, OUTPUT_FIELDS } from "./src/tools/validate.mjs";
 
 const $ = (sel) => document.querySelector(sel);
 const present = typeof document.modelContext?.registerTool === "function";
@@ -189,6 +189,14 @@ function commitExpressionInput(input) {
   error.textContent = "";
   store.dispatch({ type: "EDIT_EXPRESSION", field: input.dataset.field, expr: input.value });
   render();
+}
+
+function visibleExpressionDraftFields() {
+  const expressions = store.getState().expressions;
+  const draftFields = new Set([...document.querySelectorAll("#grid input[data-field]")]
+    .filter((input) => input.value !== expressions[input.dataset.field])
+    .map((input) => input.dataset.field));
+  return OUTPUT_FIELDS.filter((field) => draftFields.has(field));
 }
 
 function renderRail(outs) {
@@ -476,23 +484,6 @@ function render() {
   }
 }
 
-function flushGridDrafts() {
-  try {
-    for (const input of document.querySelectorAll("#grid input")) {
-      try {
-        const committed = store.getState().expressions[input.dataset.field];
-        if (input.value === committed || input.value.length > MAX_EXPRESSION_CHARS) continue;
-        parse(input.value);
-        commitExpressionInput(input);
-      } catch {
-        // Invalid drafts and unexpected DOM state stay local and cannot block a tool call.
-      }
-    }
-  } catch {
-    // A missing or replaced grid cannot block the WebMCP surface.
-  }
-}
-
 $("#priority-select").addEventListener("change", (event) => {
   store.dispatch({ type: "SET_PRIORITY", priority: event.target.value.split(",") });
   render();
@@ -539,31 +530,39 @@ if (present) {
       annotations: definition.annotations,
     }, options),
     (tool) => {
-      const executeTool = createToolExecutor(store, personas, tool.name, (result) => {
-        if (tool.name === "read_mapping_session") return;
-        if (result.ok && tool.name === "find_mapping_counterexample") {
-          if (result.payload.cleanSweep) {
-            ui.lastSweep = result.payload;
-            if (result.payload.fullSweep) { ui.lastFind = result.payload; ui.selected = null; }
-          } else {
-            ui.lastFind = result.payload;
-            ui.lastSweep = null;
-            ui.selected = null;
-          }
-        }
-        if (result.ok && tool.name === "prepare_mapping_review") ui.lastPacket = result.payload;
-        render(); // UI updates BEFORE the tool returns (SPEC §7)
-      });
       return {
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema,
         annotations: tool.annotations,
         execute: async (args, context) => {
-          if (tool.name !== "read_mapping_session") {
-            if (!context?.signal?.aborted) flushGridDrafts();
+          const isRead = tool.name === "read_mapping_session";
+          const executeTool = createToolExecutor(store, personas, tool.name, (result) => {
+            if (isRead) return;
+            if (!result.ok) return;
+            if (tool.name === "find_mapping_counterexample") {
+              if (result.payload.cleanSweep) {
+                ui.lastSweep = result.payload;
+                if (result.payload.fullSweep) { ui.lastFind = result.payload; ui.selected = null; }
+              } else {
+                ui.lastFind = result.payload;
+                ui.lastSweep = null;
+                ui.selected = null;
+              }
+            }
+            if (tool.name === "prepare_mapping_review") ui.lastPacket = result.payload;
+            render(); // UI updates BEFORE the tool returns (SPEC §7)
+          }, isRead ? undefined : () => {
             toolSnapshotBefore = store.snapshot();
-          }
+            const fields = visibleExpressionDraftFields();
+            return fields.length
+              ? {
+                  code: "UNCOMMITTED_DRAFT",
+                  reason: "visible expression drafts must be committed or reverted by the human before running this tool; then call read_mapping_session again",
+                  fields,
+                }
+              : null;
+          });
           return executeTool(args, context);
         },
       };

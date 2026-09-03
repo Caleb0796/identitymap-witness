@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { request } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { startServer } from "../harness/serve.mjs";
+
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 function get(port, path) {
   return new Promise((resolve, reject) => {
@@ -15,9 +22,63 @@ function get(port, path) {
       }));
     });
     req.on("error", reject);
+    req.setTimeout(2_000, () => req.destroy(new Error("local server request timed out")));
     req.end();
   });
 }
+
+function stopChild(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => child.kill("SIGKILL"), 2_000);
+    timer.unref();
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    child.kill("SIGTERM");
+  });
+}
+
+test("serve entrypoint starts from a path containing spaces", async (t) => {
+  const temp = await mkdtemp(join(tmpdir(), "imw serve entrypoint "));
+  t.after(() => rm(temp, { recursive: true, force: true }));
+  const linkedRoot = join(temp, "identitymap-witness");
+  await symlink(ROOT, linkedRoot, "dir");
+  const script = join(linkedRoot, "harness", "serve.mjs");
+  const child = spawn(process.execPath, ["--preserve-symlinks-main", script], {
+    env: { ...process.env, PORT: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  t.after(() => stopChild(child));
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  const port = await new Promise((resolvePort, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`serve entrypoint did not start; stderr: ${stderr}`));
+    }, 5_000);
+    timer.unref();
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      reject(new Error(`serve entrypoint exited before startup (${code ?? signal}); stderr: ${stderr}`));
+    });
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      const match = stdout.match(/http:\/\/127\.0\.0\.1:(\d+)\//);
+      if (!match) return;
+      clearTimeout(timer);
+      resolvePort(Number(match[1]));
+    });
+  });
+
+  const response = await get(port, "/");
+  assert.equal(response.status, 200);
+  assert.match(response.body.toString("utf8"), /IdentityMap Witness/);
+});
 
 test("local server exposes only the public application asset graph", async (t) => {
   const { server, port } = await startServer(0);

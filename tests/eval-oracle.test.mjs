@@ -22,6 +22,8 @@ const TOOL_NAMES = [
   "preview_mapping_patch",
   "prepare_mapping_review",
 ];
+const OUTPUT_FIELDS = ["displayName", "group", "managerId", "department", "email"];
+const UNCOMMITTED_DRAFT_REASON = "visible expression drafts must be committed or reverted by the human before running this tool; then call read_mapping_session again";
 const authoritative = (snapshot) => ({
   revision: snapshot.state.revision,
   priority: snapshot.state.priority,
@@ -52,6 +54,30 @@ const readPayload = (snapshot) => ({
   pendingVersion: snapshot.state.pending?.version ?? null,
   personaCount: 8,
 });
+
+const readPagePayload = (snapshot, input = {}) => {
+  const serialized = JSON.stringify(readPayload(snapshot));
+  const offset = input.continuation?.offset ?? 0;
+  let end = Math.min(offset + 512, serialized.length);
+  if (end < serialized.length
+      && /[\uD800-\uDBFF]/.test(serialized[end - 1])
+      && /[\uDC00-\uDFFF]/.test(serialized[end])) end -= 1;
+  const continuation = end < serialized.length
+    ? {
+        expectedRevision: snapshot.state.revision,
+        expectedPendingVersion: snapshot.state.pending?.version ?? null,
+        offset: end,
+      }
+    : null;
+  return {
+    revision: snapshot.state.revision,
+    encoding: "json",
+    sessionChunk: serialized.slice(offset, end),
+    offset,
+    sessionLength: serialized.length,
+    continuation,
+  };
+};
 
 const findPayload = (evidenceId) => ({
   revision: 17,
@@ -99,6 +125,12 @@ const packetRecord = (id, evidenceIds = []) => ({
   blockers: [],
 });
 
+const invocationBoundary = (snapshot) => ({
+  invocationStateHashBefore: hash(snapshot),
+  invocationAuthoritativeHashBefore: hash(authoritative(snapshot)),
+  invocationSnapshotBefore: snapshot,
+});
+
 function entry(toolName, before, after, payload, extra = {}) {
   return {
     round: 1,
@@ -113,6 +145,7 @@ function entry(toolName, before, after, payload, extra = {}) {
     authoritativeHashAfter: hash(authoritative(after)),
     snapshotBefore: before,
     snapshotAfter: after,
+    ...invocationBoundary(before),
     payload,
     ...extra,
   };
@@ -225,6 +258,65 @@ test("failed and malformed calls require valid equal full-state hashes", () => {
   const result = auditTrace([malformed]);
   assert.equal(result.failedCallHashFailures.length, 1);
   assert.ok(result.writeOracleFailures.some((failure) => /four valid SHA-256 hashes/.test(failure.reason)));
+});
+
+test("invocation-before and handler-entry boundaries must be identical", () => {
+  const snapshot = base();
+  const error = { error: { code: "REVISION_MISMATCH", currentRevision: 17 } };
+  const unchanged = entry("find_mapping_counterexample", snapshot, snapshot, error, {
+    input: { expectedRevision: 16 },
+    ...invocationBoundary(snapshot),
+  });
+  assert.deepEqual(auditTrace([unchanged]), {
+    failedCallHashFailures: [],
+    writeOracleFailures: [],
+  });
+
+  const handlerBefore = clone(snapshot);
+  handlerBefore.state.revision = 99;
+  handlerBefore.state.expressions.group = '"forged preflight"';
+  const forgedSuccess = entry(
+    "read_mapping_session",
+    handlerBefore,
+    handlerBefore,
+    readPayload(handlerBefore),
+    { input: {}, ...invocationBoundary(snapshot) },
+  );
+  const result = auditTrace([forgedSuccess]);
+  assert.ok(result.writeOracleFailures.some((failure) =>
+    /invocation-before and handler-entry boundaries must be identical/.test(failure.reason)),
+  JSON.stringify(result.writeOracleFailures));
+
+  const changedFailure = entry("find_mapping_counterexample", handlerBefore, snapshot, {
+    error: { code: "REVISION_MISMATCH", currentRevision: 99 },
+  }, {
+    input: { expectedRevision: 17 },
+  });
+  const changedResult = auditTrace([changedFailure]);
+  assert.equal(changedResult.failedCallHashFailures.length, 1);
+  assert.ok(changedResult.writeOracleFailures.some((failure) =>
+    /failed call must leave the full snapshot/.test(failure.reason)));
+});
+
+test("missing, partial, or forged invocation-before evidence fails closed", () => {
+  const snapshot = base();
+  const missing = entry("read_mapping_session", snapshot, snapshot, readPayload(snapshot));
+  delete missing.invocationStateHashBefore;
+  delete missing.invocationAuthoritativeHashBefore;
+  delete missing.invocationSnapshotBefore;
+  const partial = entry("read_mapping_session", snapshot, snapshot, readPayload(snapshot));
+  delete partial.invocationStateHashBefore;
+  delete partial.invocationAuthoritativeHashBefore;
+  const forged = entry("read_mapping_session", snapshot, snapshot, readPayload(snapshot), {
+    ...invocationBoundary(snapshot),
+    invocationStateHashBefore: "0".repeat(64),
+  });
+
+  for (const item of [missing, partial, forged]) {
+    const result = auditTrace([item]);
+    assert.ok(result.writeOracleFailures.some((failure) =>
+      /invocation-before/.test(failure.reason)), JSON.stringify(result.writeOracleFailures));
+  }
 });
 
 test("raw snapshot and hash tampering fail closed", () => {
@@ -475,6 +567,91 @@ test("read success envelope must exactly describe the captured state", () => {
     assert.ok(result.writeOracleFailures.some((failure) => /valid success or error envelope/.test(failure.reason)),
       JSON.stringify(result.writeOracleFailures));
   }
+});
+
+test("paged read envelopes validate every exact JSON chunk and canonical continuation", () => {
+  const snapshot = base();
+  snapshot.state.expressions = Object.fromEntries(OUTPUT_FIELDS
+    .map((field) => [field, `"${"x".repeat(510)}"`]));
+  const firstInput = {};
+  const first = readPagePayload(snapshot, firstInput);
+  assert.equal(first.continuation.offset, 512);
+  const secondInput = { continuation: first.continuation };
+  const second = readPagePayload(snapshot, secondInput);
+
+  assert.deepEqual(auditTrace([
+    entry("read_mapping_session", snapshot, snapshot, first, { input: firstInput }),
+    entry("read_mapping_session", snapshot, snapshot, second, { input: secondInput }),
+  ]), {
+    failedCallHashFailures: [],
+    writeOracleFailures: [],
+  });
+
+  const malformed = [
+    entry("read_mapping_session", snapshot, snapshot, {
+      ...first,
+      sessionChunk: `${first.sessionChunk.slice(0, -1)}!`,
+    }, { input: firstInput }),
+    ...[513, 511].map((offset) => {
+      const input = { continuation: { ...first.continuation, offset } };
+      return entry("read_mapping_session", snapshot, snapshot,
+        readPagePayload(snapshot, input), { input });
+    }),
+    entry("read_mapping_session", snapshot, snapshot, second, {
+      input: { continuation: { ...first.continuation, expectedPendingVersion: 1 } },
+    }),
+  ];
+  for (const item of malformed) {
+    const result = auditTrace([item]);
+    assert.ok(result.writeOracleFailures.some((failure) =>
+      /valid success or error envelope/.test(failure.reason)), JSON.stringify(result.writeOracleFailures));
+  }
+});
+
+test("UNCOMMITTED_DRAFT is exact, ordered, and restricted to non-read tools", () => {
+  const snapshot = base();
+  const valid = {
+    error: {
+      code: "UNCOMMITTED_DRAFT",
+      reason: UNCOMMITTED_DRAFT_REASON,
+      fields: ["group", "email"],
+    },
+  };
+  for (const toolName of TOOL_NAMES.filter((name) => name !== "read_mapping_session")) {
+    assert.deepEqual(auditTrace([
+      entry(toolName, snapshot, snapshot, valid, { ...invocationBoundary(snapshot) }),
+    ]), {
+      failedCallHashFailures: [],
+      writeOracleFailures: [],
+    }, toolName);
+  }
+
+  for (const [toolName, payload] of [
+    ["read_mapping_session", valid],
+    ["stage_mapping_invariants", { error: { ...valid.error, fields: [] } }],
+    ["stage_mapping_invariants", { error: { ...valid.error, fields: ["email", "group"] } }],
+    ["stage_mapping_invariants", { error: { ...valid.error, fields: ["group", "group"] } }],
+    ["stage_mapping_invariants", { error: { ...valid.error, fields: ["bogus"] } }],
+    ["stage_mapping_invariants", {
+      error: { ...valid.error, reason: "commit the draft" },
+    }],
+  ]) {
+    const result = auditTrace([entry(toolName, snapshot, snapshot, payload)]);
+    assert.ok(result.writeOracleFailures.some((failure) =>
+      /valid success or error envelope/.test(failure.reason)),
+    `${toolName}: ${JSON.stringify(result.writeOracleFailures)}`);
+  }
+
+  const changedAfter = clone(snapshot);
+  changedAfter.nextPendingVersion = 1;
+  const changedResult = auditTrace([
+    entry("stage_mapping_invariants", snapshot, changedAfter, valid, {
+      ...invocationBoundary(snapshot),
+    }),
+  ]);
+  assert.equal(changedResult.failedCallHashFailures.length, 1);
+  assert.ok(changedResult.writeOracleFailures.some((failure) =>
+    /failed call must leave the full snapshot/.test(failure.reason)));
 });
 
 test("derived-tool success envelopes require every contracted field", () => {

@@ -4,7 +4,7 @@ Automated CODE_COMPLETE checks do not make the entry ready. A human owner must
 verify every item below from the final deployed commit and check the boxes by hand.
 This file intentionally does not mark human work complete.
 
-- [ ] **Final deployment re-verification.** After the Phase 2 commit is pushed,
+- [ ] **Final deployment re-verification.** After the final-audit fix commit is pushed,
       verify `https://identitymap-witness.onrender.com/`, `/app.js`,
       `/data/personas.json`, and `/src/tools/defs.mjs` from the remote origin.
       Confirm the `.mjs` response has a JavaScript content type. In a fresh
@@ -13,8 +13,8 @@ This file intentionally does not mark human work complete.
       r17, and five tools.
 
 - [ ] **Three cold human model-evaluation runs.** Execute
-      [`docs/HUMAN-EVAL-PROTOCOL.md`](HUMAN-EVAL-PROTOCOL.md) on 2026-09-01 in
-      three distinct new ChatGPT conversations and fresh built-in browser sessions.
+      [`docs/HUMAN-EVAL-PROTOCOL.md`](HUMAN-EVAL-PROTOCOL.md) in three distinct new
+      ChatGPT conversations and fresh built-in browser sessions.
       Produce exactly these six paired artifacts:
       `evidence/model-eval-direct.{png,json}`,
       `evidence/model-eval-ambiguous.{png,json}`, and
@@ -59,7 +59,7 @@ This file intentionally does not mark human work complete.
       four current answers from [`docs/DEVPOST-DRAFT.md`](DEVPOST-DRAFT.md), then
       record the submitted Devpost URL in `evidence/devpost-submitted.txt`.
 
-- [ ] **Freeze rehearsal.** Before 12:00 PT on 2026-09-03, use a clean profile to
+- [ ] **Freeze rehearsal.** Before final submission, use a clean profile to
       rehearse the deployed two-prompt path, evidence links, video link, and public
       repository. Confirm no submission language upgrades the labeled
       by-construction ablation or the designed-not-run Browser-Use/Full-CDP arms

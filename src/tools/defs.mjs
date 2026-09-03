@@ -1,4 +1,4 @@
-// Isomorphic tool surface — SPEC.md r4 §7, complete contracts. Imported unchanged
+// Isomorphic tool surface — SPEC.md r5 §7, complete contracts. Imported unchanged
 // by the page (app.js), the tests, and the ablation. Zero node-only imports.
 import { parse } from "../engine/parser.mjs";
 import { evaluate } from "../engine/eval.mjs";
@@ -13,6 +13,7 @@ import {
   MAX_INVARIANTS,
   MAX_PERSONA_ID_CHARS,
   MAX_PERSONA_IDS,
+  MAX_READ_SESSION_CHARS,
   MAX_REVISION,
   MAX_RULE_TEXT_CHARS,
   OUTPUT_FIELDS,
@@ -39,6 +40,24 @@ export const GOLDEN_STATE = {
 const failure = (code, extra = {}) => ({ ok: false, error: { code, ...extra } });
 const mismatch = (s) => failure("REVISION_MISMATCH", { currentRevision: s.revision });
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+const MAX_OUTPUT_CHARS = 1500;
+const READ_SESSION_CHUNK_CHARS = 512;
+const readSessionChunkEnd = (serialized, offset) => {
+  let end = Math.min(offset + READ_SESSION_CHUNK_CHARS, serialized.length);
+  if (end < serialized.length
+      && /[\uD800-\uDBFF]/.test(serialized[end - 1])
+      && /[\uDC00-\uDFFF]/.test(serialized[end])) end -= 1;
+  return end;
+};
+const isReadSessionContinuationOffset = (serialized, offset) => {
+  let boundary = readSessionChunkEnd(serialized, 0);
+  while (boundary < serialized.length) {
+    if (boundary === offset) return true;
+    if (boundary > offset) return false;
+    boundary = readSessionChunkEnd(serialized, boundary);
+  }
+  return false;
+};
 const noInvariants = (s, emptySelection = false) => failure("NO_INVARIANTS", {
   reason: emptySelection
     ? "no invariants selected — omit invariantIds to check all confirmed rules, or pass confirmed ids returned by read_mapping_session"
@@ -48,9 +67,9 @@ const noInvariants = (s, emptySelection = false) => failure("NO_INVARIANTS", {
 });
 
 const HANDLERS = {
-  read_mapping_session(store, personas) {
+  read_mapping_session(store, personas, args) {
     const s = store.getState();
-    return { ok: true, payload: {
+    const payload = {
       revision: s.revision,
       priority: s.priority,
       fields: Object.entries(s.expressions).map(([field, expr]) => ({ field, expr, defectFree: null })),
@@ -58,6 +77,40 @@ const HANDLERS = {
       pendingRuleIds: s.pending?.rules.map((rule) => rule.id) ?? [],
       pendingVersion: s.pending?.version ?? null,
       personaCount: personas.length,
+    };
+    const serialized = JSON.stringify(redactPayload(payload));
+    if (!args.continuation && serialized.length <= MAX_OUTPUT_CHARS)
+      return { ok: true, payload };
+
+    const expectedRevision = args.continuation?.expectedRevision ?? s.revision;
+    const expectedPendingVersion = args.continuation
+      ? args.continuation.expectedPendingVersion
+      : (s.pending?.version ?? null);
+    const offset = args.continuation?.offset ?? 0;
+    if (expectedRevision !== s.revision) return mismatch(s);
+    if (expectedPendingVersion !== (s.pending?.version ?? null))
+      return failure("INVALID_INPUT", {
+        reason: "continuation no longer matches the current session — restart read_mapping_session",
+      });
+    if (offset >= serialized.length)
+      return failure("INVALID_INPUT", { reason: "continuation offset exceeds session length" });
+    if (offset > 0
+        && /[\uD800-\uDBFF]/.test(serialized[offset - 1])
+        && /[\uDC00-\uDFFF]/.test(serialized[offset]))
+      return failure("INVALID_INPUT", { reason: "continuation offset splits a Unicode character" });
+    if (args.continuation && !isReadSessionContinuationOffset(serialized, offset))
+      return failure("INVALID_INPUT", { reason: "continuation offset is not a page boundary" });
+    const end = readSessionChunkEnd(serialized, offset);
+    const continuation = end < serialized.length
+      ? { expectedRevision, expectedPendingVersion, offset: end }
+      : null;
+    return { ok: true, payload: {
+      revision: s.revision,
+      encoding: "json",
+      sessionChunk: serialized.slice(offset, end),
+      offset,
+      sessionLength: serialized.length,
+      continuation,
     } };
   },
 
@@ -205,11 +258,21 @@ const HANDLERS = {
 
 export const TOOLS = [
   { name: "read_mapping_session",
-    description: "Read the current unsaved mapping session. Returns the revision, source priority, page-committed draft field expressions, confirmed pin ids, pending rule ids/version, and persona count; never returns profile values. Use the returned revision as expectedRevision for every other tool, and re-read after human confirmation or edits.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    description: "Read the current unsaved mapping session. Normally returns all page-committed expressions and metadata. If that JSON exceeds the output budget, returns an exact JSON sessionChunk plus a continuation; concatenate chunks and pass each returned continuation in order. Changing or skipping a cursor can yield incomplete JSON. Continuations fence revision and pending version. Never returns profile values or changes state. Use its revision for every other tool.",
+    inputSchema: { type: "object", properties: {
+      continuation: { type: "object", properties: {
+        expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION,
+          description: "Revision from the paged summary; a changed session returns REVISION_MISMATCH." },
+        expectedPendingVersion: { type: ["integer", "null"], minimum: 1, maximum: MAX_REVISION,
+          description: "Pending version from the previous continuation; detects same-revision staging changes." },
+        offset: { type: "integer", minimum: 0, maximum: MAX_READ_SESSION_CHARS,
+          description: "Serialized JSON offset named by the previous continuation." },
+      }, required: ["expectedRevision", "expectedPendingVersion", "offset"], additionalProperties: false,
+      description: "Pass each returned continuation in order; changing or skipping a cursor can yield incomplete JSON." },
+    }, additionalProperties: false },
     annotations: { readOnlyHint: true, untrustedContentHint: true } },
   { name: "stage_mapping_invariants",
-    description: "Stage the complete proposed invariant set for visible human review. expectedRevision must match the current session. Staging does not confirm, persist, or change revision; later confirmation replaces the pinned set. Returns pending ids/version/digest. On success, stop for the human to choose Confirm all or Discard, then re-read.",
+    description: "Stage the complete proposed invariant set for visible human review. expectedRevision must match the current session. Staging does not confirm, persist, or change revision; later confirmation replaces the pinned set. Returns pending ids/version/digest. On success, stop for the human to choose Confirm all or Discard, then re-read. If UNCOMMITTED_DRAFT, ask the human to blur or revert the visible edits, then re-read.",
     inputSchema: { type: "object", properties: {
       expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION,
         description: "Exact revision returned by the latest read_mapping_session; REVISION_MISMATCH reports the current revision when stale." },
@@ -250,7 +313,7 @@ export const TOOLS = [
       required: ["expectedRevision", "invariants"], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true } },
   { name: "find_mapping_counterexample",
-    description: "Evaluate all synthetic personas (eight in this fixture) against confirmed invariants at expectedRevision. Returns canonical minimum witness personaIds, every violation row, scope/fullSweep flags, and one closing evidence id; records evidence but never edits the draft. Requires a nonempty confirmed/selected set. After any human edit, re-read and re-find because old evidence becomes stale.",
+    description: "Evaluate all synthetic personas (eight in this fixture) against confirmed invariants at expectedRevision. Returns canonical minimum witness personaIds, every violation row, scope/fullSweep flags, and one closing evidence id; records evidence but never edits the draft. Requires a nonempty confirmed/selected set. After any human edit, re-read and re-find because old evidence becomes stale. If UNCOMMITTED_DRAFT, ask the human to blur or revert the visible edits, then re-read.",
     inputSchema: { type: "object", properties: {
       expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION,
         description: "Exact revision returned by the latest read_mapping_session; REVISION_MISMATCH reports the current revision when stale." },
@@ -262,7 +325,7 @@ export const TOOLS = [
       required: ["expectedRevision"], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true } },
   { name: "preview_mapping_patch",
-    description: "Evaluate one candidate expr for field on the named personaIds at expectedRevision without editing the draft. Returns identity-minimized diffs, remaining violations for that field within those personas, and a non-closing preview evidence id. Use persona ids returned by find_mapping_counterexample; UNKNOWN_PERSONA identifies a bad id. The human makes any edit in the page.",
+    description: "Evaluate one candidate expr for field on the named personaIds at expectedRevision without editing the draft. Returns identity-minimized diffs, remaining violations for that field within those personas, and a non-closing preview evidence id. Use persona ids returned by find_mapping_counterexample; UNKNOWN_PERSONA identifies a bad id. The human makes any edit in the page. If UNCOMMITTED_DRAFT, ask the human to blur or revert the visible edits, then re-read.",
     inputSchema: { type: "object", properties: {
       expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION,
         description: "Exact revision returned by the latest read_mapping_session; REVISION_MISMATCH reports the current revision when stale." },
@@ -276,7 +339,7 @@ export const TOOLS = [
       required: ["expectedRevision", "field", "expr", "personaIds"], additionalProperties: false },
     annotations: { readOnlyHint: false, untrustedContentHint: true } },
   { name: "prepare_mapping_review",
-    description: "Create a review packet at expectedRevision from evidenceIds. Empty, missing, or stale ids fail. Only current counterexample or clean-sweep evidence closes pins; preview evidence never does. Returns coverage and blockers and records a packet. A fresh packet with blockers:[] enables Apply mapping (manual page control); this tool never applies or sends anything.",
+    description: "Create a review packet at expectedRevision from evidenceIds. Empty, missing, or stale ids fail. Only current counterexample or clean-sweep evidence closes pins; preview evidence never does. Returns coverage and blockers and records a packet. A fresh packet with blockers:[] enables Apply mapping (manual page control); this tool never applies or sends anything. If UNCOMMITTED_DRAFT, ask the human to blur or revert the visible edits, then re-read.",
     inputSchema: { type: "object", properties: {
       expectedRevision: { type: "integer", minimum: 0, maximum: MAX_REVISION,
         description: "Exact revision returned by the latest read_mapping_session; REVISION_MISMATCH reports the current revision when stale." },
@@ -294,9 +357,9 @@ function shrink(payload) {
     violations: payload.violations.map(({ invariantId, personaId, field }) => ({ invariantId, personaId, field })),
     violationsTotal: payload.violations.length,
     truncated: true };
-  while (JSON.stringify(out).length > 1500 && out.violations.length > 1)
+  while (JSON.stringify(out).length > MAX_OUTPUT_CHARS && out.violations.length > 1)
     out = { ...out, violations: out.violations.slice(0, Math.ceil(out.violations.length / 2)) };
-  return JSON.stringify(out).length <= 1500 ? out : null;
+  return JSON.stringify(out).length <= MAX_OUTPUT_CHARS ? out : null;
 }
 
 const wireText = (r) => JSON.stringify(r.ok ? r.payload : { error: r.error });
@@ -308,7 +371,7 @@ function finalize(r) {
     : { ok: false, error: redactPayload(r.error) };
   let text = wireText(result);
 
-  if (text.length > 1500) {
+  if (text.length > MAX_OUTPUT_CHARS) {
     if (result.ok) {
       const small = shrink(result.payload);
       result = small
@@ -353,28 +416,54 @@ export function runTool(store, personas, name, args) {
   return result;
 }
 
-export function createToolExecutor(store, personas, name, onResult) {
-  return async (args, { signal } = {}) => {
+export function createToolExecutor(store, personas, name, onResult, precondition) {
+  return async (args, context = {}) => {
+    const { signal } = context;
     if (signal?.aborted) {
       return { content: [{ type: "text", text: '{"error":{"code":"ABORTED"}}' }] };
     }
-    const result = runTool(store, personas, name, args);
+    let result;
+    if (typeof precondition === "function") {
+      try {
+        const preconditionError = await precondition(args, context);
+        if (preconditionError) {
+          const { code, ...detail } = preconditionError;
+          result = finalize(failure(code, detail));
+        }
+      } catch (e) {
+        result = finalize(failure(e.code ?? "EVALUATOR_FAILED", {
+          reason: String(e.message ?? e),
+        }));
+      }
+    }
+    if (signal?.aborted) {
+      return { content: [{ type: "text", text: '{"error":{"code":"ABORTED"}}' }] };
+    }
+    if (!result) result = runTool(store, personas, name, args);
     onResult(result);
     return { content: [{ type: "text", text: wireText(result) }] };
   };
 }
 
 export async function registerToolDefinitions(tools, register, makeDefinition, signal, onRegistered) {
+  const catalog = new AbortController();
+  const abortCatalog = () => catalog.abort(signal?.reason);
+  if (signal?.aborted) abortCatalog();
+  else signal?.addEventListener("abort", abortCatalog, { once: true });
   let registeredCount = 0;
-  let failed = false;
   for (const tool of tools) {
+    if (catalog.signal.aborted) return { registeredCount: 0, failed: true };
     try {
-      await Promise.resolve(register(makeDefinition(tool), { signal }));
+      await Promise.resolve(register(makeDefinition(tool), { signal: catalog.signal }));
+      if (catalog.signal.aborted) return { registeredCount: 0, failed: true };
       registeredCount += 1;
       onRegistered(registeredCount);
     } catch {
-      failed = true;
+      signal?.removeEventListener("abort", abortCatalog);
+      catalog.abort();
+      return { registeredCount: 0, failed: true };
     }
   }
-  return { registeredCount, failed };
+  if (catalog.signal.aborted) return { registeredCount: 0, failed: true };
+  return { registeredCount, failed: false };
 }

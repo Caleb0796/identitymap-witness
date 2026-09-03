@@ -8,6 +8,7 @@ export const MAX_PERSONA_IDS = 8;
 export const MAX_PERSONA_ID_CHARS = 64;
 export const MAX_EVIDENCE_IDS = 16;
 export const MAX_EVIDENCE_ID_CHARS = 32;
+export const MAX_READ_SESSION_CHARS = 32_768;
 export const MAX_REVISION = Number.MAX_SAFE_INTEGER;
 
 const OUTPUT_FIELD_SET = new Set(OUTPUT_FIELDS);
@@ -121,7 +122,22 @@ export function validateToolInput(name, input) {
     throw invalidInput("input must be a plain JSON object");
 
   if (name === "read_mapping_session") {
-    requireExactKeys(input, []);
+    requireExactKeys(input, [], ["continuation"]);
+    if (hasOwn(input, "continuation")) {
+      const continuation = input.continuation;
+      if (!isPlainObject(continuation))
+        throw invalidInput("continuation must be a plain object");
+      requireExactKeys(continuation, ["expectedRevision", "expectedPendingVersion", "offset"]);
+      if (!Number.isSafeInteger(continuation.expectedRevision) || continuation.expectedRevision < 0)
+        throw invalidInput("continuation expectedRevision must be a nonnegative safe integer");
+      if (continuation.expectedPendingVersion !== null
+          && (!Number.isSafeInteger(continuation.expectedPendingVersion)
+            || continuation.expectedPendingVersion < 1))
+        throw invalidInput("continuation expectedPendingVersion must be null or a positive safe integer");
+      if (!Number.isInteger(continuation.offset)
+          || continuation.offset < 0 || continuation.offset > MAX_READ_SESSION_CHARS)
+        throw invalidInput("continuation offset is outside its limit");
+    }
     return;
   }
 
