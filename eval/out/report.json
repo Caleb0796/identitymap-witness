@@ -1,7 +1,7 @@
 {
-  "when": "2026-09-02T17:27:22.929Z",
-  "sha": "bad6878",
-  "traceFile": "eval/out/relay-bad6878.json",
+  "when": "2026-09-03T19:55:19.893Z",
+  "sha": "fb9f40e",
+  "traceFile": "eval/out/relay-fb9f40e.json",
   "layers": {
     "unit": {
       "exit": 0
@@ -14,7 +14,7 @@
     }
   },
   "scorer": {
-    "traceFile": "eval/out/relay-bad6878.json",
+    "traceFile": "eval/out/relay-fb9f40e.json",
     "classes": {
       "DC1": true,
       "DC2": true,
