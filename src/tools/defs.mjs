@@ -205,7 +205,7 @@ const HANDLERS = {
 
 export const TOOLS = [
   { name: "read_mapping_session",
-    description: "Read the current unsaved mapping session. Returns the revision, source priority, draft field expressions, confirmed pin ids, pending rule ids/version, and persona count; never returns profile values. Use the returned revision as expectedRevision for every other tool, and re-read after human confirmation or edits.",
+    description: "Read the current unsaved mapping session. Returns the revision, source priority, page-committed draft field expressions, confirmed pin ids, pending rule ids/version, and persona count; never returns profile values. Use the returned revision as expectedRevision for every other tool, and re-read after human confirmation or edits.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, untrustedContentHint: true } },
   { name: "stage_mapping_invariants",
@@ -349,7 +349,7 @@ export function runTool(store, personas, name, args) {
     catch (e) { r = failure(e.code ?? "EVALUATOR_FAILED", { reason: String(e.message ?? e) }); }
   }
   const result = finalize(r);
-  if (!result.ok) store.restore(snap);
+  if (!result.ok && name !== "read_mapping_session") store.restore(snap);
   return result;
 }
 

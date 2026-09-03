@@ -38,7 +38,9 @@ test("every reachable failed tool result leaves the store byte-identical", async
 
   await t.test("read: output-budget EVALUATOR_FAILED", () => {
     const store = createStore({ ...GOLDEN_STATE, pins: [LONG_PIN] });
+    const stateBefore = store.getState();
     assertFailedAtomically(store, personas, "read_mapping_session", {}, "EVALUATOR_FAILED");
+    assert.equal(store.getState(), stateBefore, "failed read rebound the store state");
   });
 
   for (const [name, args] of [

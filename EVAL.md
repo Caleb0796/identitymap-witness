@@ -29,7 +29,7 @@ confirmation, and a four-hash per-call write oracle.
 | invariants | 3 types × pass/violate; checker case-insensitive where SPEC §5 says so (DC1 asymmetry test) |
 | witness | finds all 4 seeded violations; exhaustive minimal set == oracle (size 3, both valid sets accepted); deterministic tie-break; single-invariant → size 1; clean draft → successful citable clean sweep |
 | store | `STAGE_RULES`/`DISCARD_RULES` do not bump revision; version-bound `CONFIRM_RULES` replaces pins and bumps once; stale/double confirms fail; canonical-content pin changes preserve exact invalidation; complete snapshots include both hidden allocators and reject missing counters; recordEvidence/recordPacket do NOT bump |
-| tools | all 5 happy paths; schema/runtime parity for exact string/array/revision limits; non-plain/non-JSON, extra, wrong-type, oversized, and duplicate inputs return `INVALID_INPUT` before handlers; stale-revision precedence remains stable; every reachable error is failure-atomic; ≤1500 budget, manager-id minimization, canary sentinel, witness cap, and fencing are asserted |
+| tools | all 5 happy paths; schema/runtime parity for exact string/array/revision limits; non-plain/non-JSON, extra, wrong-type, oversized, and duplicate inputs return `INVALID_INPUT` before handlers; stale-revision precedence remains stable; every reachable handler error is failure-atomic at handler entry; ≤1500 budget, manager-id minimization, canary sentinel, witness cap, and fencing are asserted |
 | confirmation/UI | canonical-key-order digest stability plus deliberate FNV-1a collision proves equality is canonical JSON, not digest; hostile rule group/id render through `textContent`; discarded v1 control cannot confirm v2; confirmed hostile id survives find as exact text with no HTML execution |
 | eval oracle | raw snapshot sections, derived-record ids, and hidden counters are own/type/coherence checked; browser SHA-256 values are recomputed; complete per-tool success/error envelopes are required; missing/fake hashes, extra state, modified old evidence, wrong returned ids, unknown tools, and allocator over/under-increments fail closed |
 | redaction | canary sweep over every tool × every persona × keys AND values AND candidates AND diffs; crafted leak in a payload KEY caught; `<redacted:changed>` includes managerId; raw invariant values never enter details |
@@ -83,7 +83,7 @@ disabled UI and zero registered tools; then one browser session, rounds:
 12. real grid change enters invalid `user.`: complete store snapshot byte-identical
     at r25, inline position error visible, matrix and GREEN packet intact; a valid
     `user.managerId` commits exactly once → r26; a valid input-only edit (no blur)
-    is flushed by the next tool call → r27.
+    survives a pure read at r26, then is flushed by the next non-read tool → r27.
 Trace records every invocationId/status/payload/ms plus `snapshotBefore/After`,
 full-state SHA-256 before/after, and authoritative-slice SHA-256 before/after;
 every scripted human action is labeled `human-dom` with its page selector →
@@ -114,13 +114,16 @@ DESIGNED-NOT-RUN and appear in the README and Devpost limitations, never in clai
 
 `eval/run.mjs`: layer gates → scorer → ablation → final per-call write oracle →
 `eval/out/report.json`. The oracle re-hashes both raw snapshots in Node and requires:
-all failed calls leave the complete snapshot byte-identical; every tool leaves
+all failed handlers leave their handler-entry snapshot byte-identical; every tool leaves
 `{revision,priority,expressions,pins}` unchanged; successful stage changes only
 `pending` and advances the hidden pending-version counter by exactly one (or zero
 for an identical re-stage); successful find/preview add exactly the returned
 evidence id and advance shared `nextId` by one; successful prepare does the same
 for its returned packet id; read changes nothing. All unrelated sections and
 hidden counters must remain exact.
+The relay captures `snapshotBefore` after any non-read page-draft preflight, so this
+oracle does not claim that a failed non-read invocation rolls back a preceding
+input-only draft synchronization.
 
 Report shape includes
 `{when, sha, traceFile, layers, scorer, ablation, counters, thresholds, killLines,

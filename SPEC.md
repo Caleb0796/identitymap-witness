@@ -7,7 +7,8 @@ gpt-5.6-sol adversarial review (`reviews/codex-sol-2026-08-29.md`): direction cu
 defective-by-design golden draft, full tool schemas, fingerprint invalidation,
 honest eval relabeling. r4 changelog — R1: clean sweeps are successful results,
 with explicit checked scope and full-sweep-gated global all-clear UI; R2: every
-failed tool result restores byte-identical store state, including its id allocator;
+failed handler result leaves its handler-entry store snapshot byte-identical,
+including its id allocator;
 R4: invariant validation and tool schemas fail closed, empty sessions cannot turn
 green, witness caps are enforced, and annotations disclose derived-state writes
 and untrusted output; R5: review packets carry their evidence ids and become stale
@@ -42,7 +43,8 @@ CLAIMED (all of it, nothing else):
 
 Leverage story for judges: the loop consumes page-exclusive session state
 (unsaved expressions, unsaved priority order, never-persisted pins), updates the
-visible UI before every tool return, and survives a mid-session human edit. The
+visible UI before every tool return that has UI effects, leaves the UI untouched
+for a pure read, and survives a mid-session human edit. The
 persisted-state ablation (EVAL) quantifies WHICH defects exist only pre-save — as
 a workflow property, by construction, labeled as such.
 
@@ -173,12 +175,18 @@ Tool object schemas reject additional properties. Every
 success payload includes `revision`. One text content item;
 `JSON.stringify(payload).length <= 1500` (over-budget → violations trimmed to ids-only
 and the list capped to fit, with `truncated:true` + `violationsTotal`; irreducibly
-over → `EVALUATOR_FAILED`). UI renders BEFORE return. Every tool has
+over → `EVALUATOR_FAILED`). Tools with UI effects render BEFORE return;
+`read_mapping_session` performs no render. Every tool has
 `untrustedContentHint:true`; only `read_mapping_session` has `readOnlyHint:true`.
 Output size is a second failure boundary: schema-valid states (e.g. five 512-character expressions) can exceed the 1,500-character payload cap and return EVALUATOR_FAILED rather than a silently truncated draft.
 The other four use `readOnlyHint:false` because they stage pending state or record
 derived evidence/packets. Hints are not security. No apply/save/push tool exists.
-All failed calls restore the full snapshot, including both hidden allocators.
+All failed handler executions leave their entry snapshot byte-identical, including
+both hidden allocators. Mutating handlers restore that snapshot; the read handler
+never writes and skips restoration so it also preserves store object identity.
+Before a non-read handler begins, the page wrapper may commit a valid focused
+input-only draft. That preflight synchronization is outside the handler transaction,
+so a later handler failure retains the synchronized page edit.
 
 Caller-controlled limits are: 8 invariants; invariant ids 64 characters; other
 rule text 128; expressions 512; 8 invariant ids; 8 persona ids of 64 characters;
@@ -189,6 +197,9 @@ All id arrays are unique. These same limits appear in JSON Schema and runtime co
 - in: `{}` — out: `{revision, priority, fields: [{field, expr, defectFree: null}],
   pinIds: [string], pendingRuleIds: [string], pendingVersion: integer|null, personaCount}`
   (`defectFree` is always null — the page never grades itself; the agent judges.)
+- `fields` contains expressions already committed by the page UI. A focused
+  input-only value remains local until a change/blur or a non-read tool preflight;
+  reading does not commit it, rebuild the DOM, or update inspection bookkeeping.
 
 **stage_mapping_invariants** (readOnly false — pending proposal only)
 - in: `{expectedRevision, invariants: [{id?, type, ...perTypeFields}]}` (1–8), with
@@ -266,12 +277,17 @@ All id arrays are unique. These same limits appear in JSON Schema and runtime co
   fail `STALE_CONFIRM` unless the supplied version exactly matches the live pending
   version. Only the human UI dispatches those two version-bound actions.
   `recordEvidence`/`recordPacket` do NOT bump (derived data).
-- Tool calls are failure-atomic: `runTool` snapshots the state and store-local id
-  allocator plus the store-local pending-version counter on entry. Every final
-  `ok:false` restores that complete snapshot by rebinding the state, so `revision`,
-  `pins`, `pending`, `evidence`, `packets`, and both hidden counters are exactly as
-  they were before the call. Incomplete, non-JSON, malformed-rule, digest-mismatched,
-  or derived-record/allocator-incoherent snapshots are rejected fail-closed.
+- Tool handlers are failure-atomic: mutating handlers snapshot the state and
+  store-local id allocator plus the store-local pending-version counter on entry.
+  Every final `ok:false` from those handlers restores that complete snapshot by
+  rebinding the state. The read handler never writes and skips restoration, so it
+  preserves both bytes and state identity on success or failure. In all cases,
+  `revision`, `pins`, `pending`, `evidence`, `packets`, and both hidden counters are
+  exactly as they were at handler entry after a failed handler execution. A non-read
+  WebMCP wrapper may first synchronize a valid focused input-only page draft; that
+  preflight edit precedes the handler snapshot and is not rolled back by a later
+  failure. Incomplete, non-JSON, malformed-rule, digest-mismatched, or
+  derived-record/allocator-incoherent snapshots are rejected fail-closed.
 - Packet freshness is derived on every render: `packetFresh(pkt, state)` is true
   exactly when `pkt.revision === state.revision` and every id in
   `pkt.evidenceIds` exists in `state.evidence` and is not stale. Packet UI status

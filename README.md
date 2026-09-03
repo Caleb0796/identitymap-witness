@@ -61,7 +61,7 @@ the demo path.
 
 | tool | authority |
 |---|---|
-| `read_mapping_session` | Read current draft expressions, confirmed rule ids, pending state, and revision; returns no profile values. |
+| `read_mapping_session` | Read page-committed draft expressions, confirmed rule ids, pending state, and revision; returns no profile values and changes no page or session state. |
 | `stage_mapping_invariants` | Stage canonical pending rules for human review; it cannot confirm them. |
 | `find_mapping_counterexample` | Exhaustively find a minimal synthetic witness against confirmed rules. |
 | `preview_mapping_patch` | Preview a redacted patch without mutating the draft. |

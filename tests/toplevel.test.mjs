@@ -55,11 +55,16 @@ test("app.js has no HTML-string parsing sinks", async () => {
   assert.doesNotMatch(source, /insertAdjacentHTML\s*\(/);
 });
 
-test("app registration uses method feature detection and a non-BFCache page lifetime signal", async () => {
+test("app registration uses method feature detection, a non-BFCache lifetime, and pure reads", async () => {
   const source = await readFile(join(ROOT, "app.js"), "utf8");
   assert.match(source, /typeof document\.modelContext\?\.registerTool === "function"/);
   assert.match(source, /const lifecycle = new AbortController\(\)/);
   assert.match(source, /if \(!event\.persisted\) lifecycle\.abort\(\)/);
+  assert.match(source, /if \(tool\.name === "read_mapping_session"\) return;/);
+  assert.match(
+    source,
+    /if \(tool\.name !== "read_mapping_session"\) \{\s*if \(!context\?\.signal\?\.aborted\) flushGridDrafts\(\);\s*toolSnapshotBefore = store\.snapshot\(\);\s*\}/,
+  );
   assert.match(
     source,
     /document\.modelContext\.registerTool\(\{\s*name: definition\.name,\s*description: definition\.description,\s*inputSchema: definition\.inputSchema,\s*execute: definition\.execute,\s*annotations: definition\.annotations,\s*\}, options\)/,

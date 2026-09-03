@@ -540,6 +540,7 @@ if (present) {
     }, options),
     (tool) => {
       const executeTool = createToolExecutor(store, personas, tool.name, (result) => {
+        if (tool.name === "read_mapping_session") return;
         if (result.ok && tool.name === "find_mapping_counterexample") {
           if (result.payload.cleanSweep) {
             ui.lastSweep = result.payload;
@@ -559,8 +560,10 @@ if (present) {
         inputSchema: tool.inputSchema,
         annotations: tool.annotations,
         execute: async (args, context) => {
-          if (!context?.signal?.aborted) flushGridDrafts();
-          toolSnapshotBefore = store.snapshot();
+          if (tool.name !== "read_mapping_session") {
+            if (!context?.signal?.aborted) flushGridDrafts();
+            toolSnapshotBefore = store.snapshot();
+          }
           return executeTool(args, context);
         },
       };

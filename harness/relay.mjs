@@ -513,7 +513,7 @@ async function e2e(baseUrl) {
     const transportBefore = await captureState();
     const t0 = Date.now();
     const r = await invokeTool(s.cdp, s.sessionId, s.frameId, toolName, input);
-    const before = await captureToolState();
+    const before = toolName === "read_mapping_session" ? transportBefore : await captureToolState();
     const after = await captureState();
     const preflightChanged = JSON.stringify(transportBefore.snapshot) !== JSON.stringify(before.snapshot);
     assertEq(preflightChanged, draftFlush, `round ${round} ${toolName} preflight draft flush`);
@@ -604,6 +604,8 @@ async function e2e(baseUrl) {
     // 1 read → r17
     const r1 = await call(1, "read_mapping_session", {});
     assertEq(r1.p.revision, 17, "round1 revision");
+    assertEq(await s.evalJs("window.__imw.toolSnapshotBefore()"), null,
+      "round1 read leaves tool snapshot bookkeeping untouched");
     // 2 hostile proposal renders as text and is discarded; 3 pins then confirm → r18
     const hostile = await call(2, "stage_mapping_invariants", {
       expectedRevision: 17,
@@ -1016,6 +1018,7 @@ async function e2e(baseUrl) {
       input.focus();
       input.value = ${JSON.stringify(inputOnlyExpression)};
       input.dispatchEvent(new Event("input", { bubbles: true }));
+      window.__inputOnlyNode = input;
       return {
         revisionAfter: window.__imw.state().revision,
         expressionAfter: window.__imw.state().expressions.managerId,
@@ -1029,10 +1032,43 @@ async function e2e(baseUrl) {
     assertEq(inputOnly12.expressionAfter, "user.managerId", "round12 input-only edit is initially uncommitted");
     assertEq(inputOnly12.inputValue, inputOnlyExpression, "round12 input-only draft is visible");
     assertEq(inputOnly12.active, true, "round12 input-only draft keeps focus");
-    const flushed12 = await call(12, "read_mapping_session", {}, { draftFlush: true });
-    assertEq(flushed12.p.revision, 27, "round12 tool call flushes input-only edit");
-    assertEq(flushed12.p.fields.find((field) => field.field === "managerId")?.expr,
-      inputOnlyExpression, "round12 read returns flushed managerId expression");
+    const beforePureRead12 = await s.evalJs(`({
+      snapshot: JSON.stringify(window.__imw.snapshot()),
+      toolSnapshotBefore: JSON.stringify(window.__imw.toolSnapshotBefore()),
+    })`);
+    const pureRead12 = await call(12, "read_mapping_session", {});
+    assertEq(pureRead12.p.revision, 26, "round12 read leaves input-only edit uncommitted");
+    assertEq(pureRead12.p.fields.find((field) => field.field === "managerId")?.expr,
+      "user.managerId", "round12 read returns the committed managerId expression");
+    const afterPureRead12 = await s.evalJs(`(() => {
+      const input = document.querySelector('#expression-managerId');
+      return {
+        snapshot: JSON.stringify(window.__imw.snapshot()),
+        toolSnapshotBefore: JSON.stringify(window.__imw.toolSnapshotBefore()),
+        inputValue: input.value,
+        active: document.activeElement === input,
+        sameInputNode: input === window.__inputOnlyNode,
+      };
+    })()`);
+    assertEq(afterPureRead12.snapshot, beforePureRead12.snapshot,
+      "round12 read leaves the complete snapshot byte-identical");
+    assertEq(afterPureRead12.toolSnapshotBefore, beforePureRead12.toolSnapshotBefore,
+      "round12 read leaves tool snapshot bookkeeping byte-identical");
+    assertEq(afterPureRead12.inputValue, inputOnlyExpression,
+      "round12 read preserves the visible input-only draft");
+    assertEq(afterPureRead12.active, true, "round12 read preserves input focus");
+    assertEq(afterPureRead12.sameInputNode, true, "round12 read does not rebuild the input DOM");
+    assertEq(await s.evalJs('document.querySelector("#rev-badge").textContent'), "r26",
+      "round12 revision badge stays unchanged after read");
+
+    const flushed12 = await call(12, "find_mapping_counterexample",
+      { expectedRevision: 26 }, { draftFlush: true });
+    assertEq(flushed12.p.error.code, "REVISION_MISMATCH",
+      "round12 non-read tool rejects the revision made stale by its draft flush");
+    assertEq(flushed12.p.error.currentRevision, 27,
+      "round12 non-read tool reports the flushed revision");
+    assertEq(await s.evalJs("window.__imw.state().expressions.managerId"), inputOnlyExpression,
+      "round12 non-read tool flushes the input-only expression");
     assertEq(await s.evalJs('document.querySelector("#rev-badge").textContent'), "r27",
       "round12 revision badge shows flushed revision");
 
